@@ -9,7 +9,8 @@ if (!cached) {
 export async function connectDB() {
   const mongoURI = process.env.MONGO_URI;
   if (!mongoURI) {
-    throw new Error('Please define the MONGO_URI environment variable');
+    console.warn('⚠️ Warning: MONGO_URI is not defined in environment variables');
+    return null;
   }
 
   if (cached.conn) {
