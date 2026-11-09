@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import MobileAppShell from '../../../../components/layout/MobileAppShell';
 import { useLanguage } from '../../../../context/LanguageContext';
 import { aiInvoiceApi, productApi } from '../../../../lib/api';
+import LiveCameraCapture from '../../../../components/camera/LiveCameraCapture';
+import { getProductImage } from '../../../../lib/productImages';
 import {
   Camera,
   Upload,
@@ -18,6 +20,7 @@ import {
   ArrowRight,
   PackageCheck,
   FileText,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 export default function AiScanPage() {
@@ -27,6 +30,7 @@ export default function AiScanPage() {
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
 
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
   const [scanning, setScanning] = useState(false);
@@ -51,6 +55,15 @@ export default function AiScanPage() {
     setSelectedFiles(newFiles);
 
     const newPreviews = newFiles.map((file) => URL.createObjectURL(file));
+    setPreviews(newPreviews);
+    setError('');
+  };
+
+  // Handle direct snapshot from in-app live mobile camera
+  const handleLiveCapture = (file) => {
+    const newFiles = [...selectedFiles, file].slice(0, 5);
+    setSelectedFiles(newFiles);
+    const newPreviews = newFiles.map((f) => URL.createObjectURL(f));
     setPreviews(newPreviews);
     setError('');
   };
@@ -86,7 +99,12 @@ export default function AiScanPage() {
         setInvoiceNumber(res.data.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`);
         setInvoiceDate(res.data.invoiceDate || new Date().toISOString().split('T')[0]);
         setNotes(res.data.notes || '');
-        setItems(res.data.items || []);
+        // Enrich extracted items with high-res grocery images
+        const enrichedItems = (res.data.items || []).map((item) => ({
+          ...item,
+          productImage: item.productImage || getProductImage(item.productName, item.category),
+        }));
+        setItems(enrichedItems);
         setScanStep('review');
       } else {
         throw new Error(res.message || 'Failed to parse invoice');
@@ -150,11 +168,16 @@ export default function AiScanPage() {
     setError('');
 
     try {
+      const preparedItems = items.map((it) => ({
+        ...it,
+        productImage: it.productImage || getProductImage(it.productName, it.category),
+      }));
+
       const payload = {
         supplierName,
         invoiceNumber,
         purchaseDate: invoiceDate,
-        items,
+        items: preparedItems,
         subtotal,
         total: grandTotal,
         paymentStatus: 'paid',
@@ -219,22 +242,39 @@ export default function AiScanPage() {
             <div className="grid grid-cols-2 gap-2.5 mt-5">
               <button
                 type="button"
-                onClick={() => cameraInputRef.current?.click()}
-                className="flex items-center justify-center gap-1.5 bg-kiryana-darkGreen hover:bg-neutral-800 active:scale-98 text-white font-bold py-3 px-3 rounded-xl text-xs transition-all shadow-sm"
+                onClick={() => {
+                  // If browser supports getUserMedia, open custom live camera viewfinder
+                  if (navigator?.mediaDevices?.getUserMedia) {
+                    setIsCameraOpen(true);
+                  } else {
+                    // Fallback to system camera input
+                    cameraInputRef.current?.click();
+                  }
+                }}
+                className="flex items-center justify-center gap-1.5 bg-kiryana-darkGreen hover:bg-neutral-800 active:scale-98 text-white font-bold py-3.5 px-3 rounded-xl text-xs transition-all shadow-md group"
               >
-                <Camera className="w-4 h-4 text-emerald-400" />
+                <div className="w-6 h-6 rounded-lg bg-emerald-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Camera className="w-4 h-4 text-emerald-400" />
+                </div>
                 <span>{t('takePicture')}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => galleryInputRef.current?.click()}
-                className="flex items-center justify-center gap-1.5 bg-white border border-gray-300 hover:bg-gray-50 active:scale-98 text-gray-800 font-bold py-3 px-3 rounded-xl text-xs transition-all shadow-sm"
+                className="flex items-center justify-center gap-1.5 bg-white border border-gray-300 hover:bg-gray-50 active:scale-98 text-gray-800 font-bold py-3.5 px-3 rounded-xl text-xs transition-all shadow-sm"
               >
                 <Upload className="w-4 h-4 text-gray-600" />
                 <span>{t('uploadImage')}</span>
               </button>
             </div>
+
+            {/* Live In-App Camera Viewfinder Modal */}
+            <LiveCameraCapture
+              isOpen={isCameraOpen}
+              onClose={() => setIsCameraOpen(false)}
+              onCapture={handleLiveCapture}
+            />
           </div>
 
           {/* Selected Previews */}
@@ -378,15 +418,32 @@ export default function AiScanPage() {
                   </button>
                 </div>
 
-                {/* Product Name Input */}
-                <div>
-                  <input
-                    type="text"
-                    value={item.productName}
-                    onChange={(e) => updateItem(idx, 'productName', e.target.value)}
-                    placeholder="Product Name"
-                    className="w-full bg-kiryana-softBg border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-900"
-                  />
+                {/* Product Image & Name Input */}
+                <div className="flex items-center gap-2.5">
+                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 border border-gray-200 shadow-inner">
+                    <img
+                      src={item.productImage || getProductImage(item.productName, item.category)}
+                      alt={item.productName}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80';
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={item.productName}
+                      onChange={(e) => {
+                        updateItem(idx, 'productName', e.target.value);
+                        updateItem(idx, 'productImage', getProductImage(e.target.value, item.category));
+                      }}
+                      placeholder="Product Name"
+                      className="w-full bg-kiryana-softBg border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-900 focus:bg-white focus:border-kiryana-freshGreen transition-colors"
+                    />
+                  </div>
                 </div>
 
                 {/* Grid for Qty, Unit, Unit Price, Line Total */}

@@ -100,6 +100,7 @@ export async function addPurchaseStock(purchaseItems, purchaseId, notes = 'Suppl
         name: item.productName,
         nameUrdu: item.productNameUrdu || '',
         category: item.category || 'General Kiryana',
+        productImage: item.productImage || '',
         purchasePrice: purchasePricePerBase,
         sellingPrice: defaultSellingPrice,
         currentStock: baseStock,

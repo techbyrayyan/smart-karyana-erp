@@ -5,6 +5,7 @@ import Link from 'next/link';
 import MobileAppShell from '../../../components/layout/MobileAppShell';
 import { useLanguage } from '../../../context/LanguageContext';
 import { productApi } from '../../../lib/api';
+import { getProductImage } from '../../../lib/productImages';
 import {
   Plus,
   Camera,
@@ -171,21 +172,55 @@ export default function ProductsPage() {
                 key={prod._id}
                 className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-card-soft transition-all hover:border-gray-200"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-bold text-gray-900 leading-snug">
-                        {prod.name}
-                      </h4>
-                      {prod.nameUrdu && (
-                        <span className="text-xs text-emerald-800 font-urdu font-medium">
-                          ({prod.nameUrdu})
-                        </span>
-                      )}
-                    </div>
+                <div className="flex items-start gap-3">
+                  {/* Product Online Image Thumbnail */}
+                  <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 border border-gray-200 shadow-inner">
+                    <img
+                      src={prod.productImage || getProductImage(prod.name, prod.category)}
+                      alt={prod.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80';
+                      }}
+                    />
+                  </div>
 
-                    <div className="text-[11px] text-gray-500 mt-0.5">
-                      {prod.category}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-1">
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="text-sm font-bold text-gray-900 leading-snug">
+                            {prod.name}
+                          </h4>
+                          {prod.nameUrdu && (
+                            <span className="text-xs text-emerald-800 font-urdu font-medium">
+                              ({prod.nameUrdu})
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-gray-500 mt-0.5">
+                          {prod.category}
+                        </div>
+                      </div>
+
+                      {/* Stock Status Badge */}
+                      <div className="text-right flex-shrink-0">
+                        <div
+                          className={`text-xs font-black px-2 py-0.5 rounded-lg inline-block ${
+                            isOut
+                              ? 'bg-rose-100 text-rose-800'
+                              : isLow
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}
+                        >
+                          {prod.currentStock} {prod.unit}
+                        </div>
+                        <span className="text-[9px] text-gray-400 mt-0.5 font-medium block">
+                          {isOut ? t('outOfStock') : isLow ? t('lowStock') : t('inStock')}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Pricing & Stock Details */}
@@ -212,24 +247,6 @@ export default function ProductsPage() {
                         </span>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Stock Status Badge */}
-                  <div className="text-right flex flex-col items-end">
-                    <div
-                      className={`text-xs font-black px-2 py-0.5 rounded-lg inline-block ${
-                        isOut
-                          ? 'bg-rose-100 text-rose-800'
-                          : isLow
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-emerald-100 text-emerald-800'
-                      }`}
-                    >
-                      {prod.currentStock} {prod.unit}
-                    </div>
-                    <span className="text-[9px] text-gray-400 mt-0.5 font-medium">
-                      {isOut ? t('outOfStock') : isLow ? t('lowStock') : t('inStock')}
-                    </span>
                   </div>
                 </div>
 

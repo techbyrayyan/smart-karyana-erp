@@ -7,6 +7,7 @@ import { useLanguage } from '../../../../context/LanguageContext';
 import { useAuth } from '../../../../context/AuthContext';
 import { productApi, customerApi, saleApi } from '../../../../lib/api';
 import ThermalReceipt from '../../../../components/receipt/ThermalReceipt';
+import { getProductImage } from '../../../../lib/productImages';
 import {
   Search,
   Plus,
@@ -316,15 +317,28 @@ export default function NewSalePage() {
                         setProductSearch('');
                       }
                     }}
-                    className="p-2.5 flex items-center justify-between hover:bg-kiryana-lightGreen/30 cursor-pointer transition-colors"
+                    className="p-2.5 flex items-center justify-between hover:bg-kiryana-lightGreen/30 cursor-pointer transition-colors gap-2.5"
                   >
-                    <div>
-                      <div className="text-xs font-bold text-gray-900">{p.name}</div>
-                      <div className="text-[10px] text-gray-500">
-                        Stock: {p.currentStock} {p.unit} • {p.variations?.length || 1} Variations
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                      <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 border border-gray-200">
+                        <img
+                          src={p.productImage || getProductImage(p.name, p.category)}
+                          alt={p.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80';
+                          }}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold text-gray-900 truncate">{p.name}</div>
+                        <div className="text-[10px] text-gray-500">
+                          Stock: {p.currentStock} {p.unit} • {p.variations?.length || 1} Variations
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex-shrink-0">
                       <span className="text-xs font-black text-kiryana-darkGreen">
                         Rs. {p.sellingPrice}
                       </span>
@@ -362,10 +376,22 @@ export default function NewSalePage() {
                 {cart.map((item, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between p-2.5 bg-kiryana-softBg rounded-xl border border-gray-200"
+                    className="flex items-center justify-between p-2.5 bg-kiryana-softBg rounded-xl border border-gray-200 gap-2"
                   >
-                    <div className="flex-1 pr-2">
-                      <div className="text-xs font-bold text-gray-900">{item.productName}</div>
+                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 border border-gray-200">
+                      <img
+                        src={item.productImage || getProductImage(item.productName)}
+                        alt={item.productName}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80';
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex-1 min-w-0 pr-1">
+                      <div className="text-xs font-bold text-gray-900 truncate">{item.productName}</div>
                       <div className="text-[10px] text-gray-500">
                         {item.variationName} @ Rs. {item.unitPrice}
                       </div>
