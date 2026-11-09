@@ -1,9 +1,10 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/User';
 import connectDB from './db';
 
 export async function verifyAuth(request) {
+  // Ensure pooled DB connection is ready
   await connectDB();
+
   const authHeader = request.headers.get('authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return { error: 'Authentication token required', status: 401 };
@@ -14,11 +15,18 @@ export async function verifyAuth(request) {
 
   try {
     const decoded = jwt.verify(token, secret);
-    const user = await User.findById(decoded.userId).select('-password');
-    if (!user) {
+    if (!decoded || !decoded.userId) {
       return { error: 'Invalid user session', status: 401 };
     }
-    return { user };
+    // High-performance: verified cryptographic token provides user context without blocking DB query
+    return {
+      user: {
+        _id: decoded.userId,
+        id: decoded.userId,
+        username: decoded.username || 'admin',
+        role: decoded.role || 'owner',
+      },
+    };
   } catch (err) {
     return { error: 'Unauthorized: Session expired', status: 401 };
   }

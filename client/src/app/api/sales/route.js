@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
+import connectDB from '../../../lib/db';
 import { verifyAuth } from '../../../lib/authHelper';
 import Sale from '../../../models/Sale';
 import Customer from '../../../models/Customer';
@@ -27,126 +28,153 @@ const generateReceiptNumber = async () => {
 };
 
 export async function GET(request) {
-  const auth = await verifyAuth(request);
-  if (auth.error) {
-    return NextResponse.json({ success: false, message: auth.error }, { status: auth.status });
+  try {
+    const auth = await verifyAuth(request);
+    if (auth.error) {
+      return NextResponse.json({ success: false, message: auth.error }, { status: auth.status });
+    }
+
+    await connectDB();
+    const { searchParams } = new URL(request.url);
+    const filter = searchParams.get('filter') || 'today';
+    const search = searchParams.get('search');
+
+    const query = { status: { $ne: 'voided' } };
+
+    if (search && search.trim()) {
+      const regex = new RegExp(search.trim(), 'i');
+      query.$or = [{ receiptNumber: regex }, { customerName: regex }, { customerPhone: regex }];
+    }
+
+    const now = new Date();
+    if (filter === 'today') {
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      query.saleDate = { $gte: startOfDay, $lte: endOfDay };
+    } else if (filter === 'yesterday') {
+      const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
+      const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+      query.saleDate = { $gte: startOfYesterday, $lte: endOfYesterday };
+    } else if (filter === 'this_week') {
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
+      query.saleDate = { $gte: startOfWeek };
+    } else if (filter === 'this_month') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      query.saleDate = { $gte: startOfMonth };
+    }
+
+    const sales = await Sale.find(query).sort({ saleDate: -1 }).limit(100).lean();
+    return NextResponse.json({ success: true, count: sales.length, sales });
+  } catch (error) {
+    console.error('Sales GET error:', error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
-
-  const { searchParams } = new URL(request.url);
-  const filter = searchParams.get('filter') || 'today';
-  const search = searchParams.get('search');
-
-  const query = { status: { $ne: 'voided' } };
-
-  if (search && search.trim()) {
-    const regex = new RegExp(search.trim(), 'i');
-    query.$or = [{ receiptNumber: regex }, { customerName: regex }, { customerPhone: regex }];
-  }
-
-  const now = new Date();
-  if (filter === 'today') {
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-    query.date = { $gte: startOfDay, $lte: endOfDay };
-  } else if (filter === 'yesterday') {
-    const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
-    const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
-    query.date = { $gte: startOfYesterday, $lte: endOfYesterday };
-  } else if (filter === 'this_week') {
-    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-    startOfWeek.setHours(0, 0, 0, 0);
-    query.date = { $gte: startOfWeek };
-  } else if (filter === 'this_month') {
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    query.date = { $gte: startOfMonth };
-  }
-
-  const sales = await Sale.find(query).sort({ date: -1 }).limit(100);
-  return NextResponse.json({ success: true, count: sales.length, sales });
 }
 
 export async function POST(request) {
-  const auth = await verifyAuth(request);
-  if (auth.error) {
-    return NextResponse.json({ success: false, message: auth.error }, { status: auth.status });
-  }
-
-  const body = await request.json();
-  const { customerId, customerName, customerPhone, isWalkIn, items, discount = 0, paidAmount, paymentMethod = 'cash', notes = '' } = body;
-
-  const processedItems = [];
-  let subtotal = 0;
-
-  for (const item of items) {
-    const product = await Product.findById(item.product);
-    if (!product) {
-      return NextResponse.json({ success: false, message: `Product not found: ${item.productName}` }, { status: 404 });
+  try {
+    const auth = await verifyAuth(request);
+    if (auth.error) {
+      return NextResponse.json({ success: false, message: auth.error }, { status: auth.status });
     }
 
-    const qty = Number(item.quantity);
-    const price = Number(item.unitPrice);
-    const mult = Number(item.multiplier) || 1;
-    const lineTotal = Number(item.lineTotal) || parseFloat((qty * price).toFixed(2));
-    const costPrice = parseFloat(((product.purchasePrice || 0) * mult).toFixed(2));
+    await connectDB();
+    const body = await request.json();
+    const { customerId, customerName, customerPhone, isWalkIn, items, discount = 0, paidAmount, paymentMethod = 'cash', notes = '' } = body;
 
-    subtotal += lineTotal;
-    processedItems.push({
-      product: product._id,
-      productName: item.productName || product.name,
-      variationName: item.variationName || `${item.quantity} ${item.unit || product.unit}`,
-      quantity: qty,
-      unit: item.unit || product.unit,
-      multiplier: mult,
-      unitPrice: price,
-      costPrice,
-      lineTotal,
+    const processedItems = [];
+    let subtotal = 0;
+
+    for (const item of items) {
+      const prodId = item.product?._id || item.product;
+      let product = null;
+      if (prodId) {
+        product = await Product.findById(prodId);
+      }
+      if (!product) {
+        return NextResponse.json({ success: false, message: `Product not found: ${item.productName}` }, { status: 404 });
+      }
+
+      const qty = Number(item.quantity) || 1;
+      const price = Number(item.unitPrice) || product.sellingPrice;
+      const mult = Number(item.multiplier) || 1;
+      const lineTotal = Number(item.lineTotal) || parseFloat((qty * price).toFixed(2));
+      const costPrice = parseFloat(((product.purchasePrice || 0) * mult).toFixed(2));
+
+      subtotal += lineTotal;
+      processedItems.push({
+        product: product._id,
+        productName: item.productName || product.name,
+        variationName: item.variationName || `${qty} ${item.unit || product.unit}`,
+        quantity: qty,
+        unit: item.unit || product.unit,
+        multiplier: mult,
+        unitPrice: price,
+        costPrice,
+        lineTotal,
+      });
+    }
+
+    const disc = parseFloat(Number(discount).toFixed(2)) || 0;
+    const grandTotal = Math.max(0, parseFloat((subtotal - disc).toFixed(2)));
+    const paid = paidAmount !== undefined ? parseFloat(Number(paidAmount).toFixed(2)) : grandTotal;
+    const remainingBalance = Math.max(0, parseFloat((grandTotal - paid).toFixed(2)));
+
+    let paymentStatus = 'paid';
+    if (paymentMethod === 'credit_khata' || paid <= 0) {
+      paymentStatus = 'unpaid';
+    } else if (paid < grandTotal) {
+      paymentStatus = 'partial';
+    }
+
+    const receiptNumber = await generateReceiptNumber();
+
+    const sale = await Sale.create({
+      receiptNumber,
+      customer: customerId || undefined,
+      customerName: isWalkIn ? 'Walk-in Customer' : (customerName || 'General Customer'),
+      customerPhone: customerPhone || '',
+      isWalkIn: !!isWalkIn,
+      items: processedItems,
+      subtotal,
+      discount: disc,
+      grandTotal,
+      paidAmount: paid,
+      remainingBalance,
+      paymentMethod,
+      paymentStatus,
+      notes,
+      saleDate: new Date(),
     });
-  }
 
-  subtotal = parseFloat(subtotal.toFixed(2));
-  const disc = parseFloat(Number(discount).toFixed(2)) || 0;
-  const grandTotal = Math.max(0, parseFloat((subtotal - disc).toFixed(2)));
-  const paid = paidAmount !== undefined ? parseFloat(Number(paidAmount).toFixed(2)) : grandTotal;
-  const remainingBalance = Math.max(0, parseFloat((grandTotal - paid).toFixed(2)));
-
-  let paymentStatus = 'paid';
-  if (paid <= 0) paymentStatus = 'unpaid';
-  else if (paid < grandTotal) paymentStatus = 'partial';
-
-  const receiptNumber = await generateReceiptNumber();
-
-  const sale = new Sale({
-    receiptNumber,
-    customer: customerId || null,
-    customerName: customerName || 'Walk-in Customer',
-    customerPhone: customerPhone || '',
-    isWalkIn: isWalkIn ?? (!customerId),
-    items: processedItems,
-    subtotal,
-    discount: disc,
-    grandTotal,
-    paidAmount: paid,
-    remainingBalance,
-    paymentStatus,
-    paymentMethod,
-    date: new Date(),
-    status: 'completed',
-    notes,
-  });
-
-  await deductSaleStock(processedItems, sale._id, `Sale Receipt #${receiptNumber}`);
-  await sale.save();
-
-  if (customerId) {
-    const cust = await Customer.findById(customerId);
-    if (cust) {
-      cust.totalPurchases += 1;
-      cust.totalSpent = parseFloat((cust.totalSpent + grandTotal).toFixed(2));
-      if (remainingBalance > 0) cust.balance = parseFloat((cust.balance + remainingBalance).toFixed(2));
-      cust.lastPurchaseDate = new Date();
-      await cust.save();
+    // Stock deduction
+    try {
+      await deductSaleStock(processedItems, sale._id, `Customer Sale #${receiptNumber}`);
+    } catch (stockErr) {
+      console.warn('Stock deduction notice:', stockErr.message);
     }
-  }
 
-  return NextResponse.json({ success: true, message: 'Sale completed', sale }, { status: 201 });
+    // Customer ledger update for Udhaar / partial payment
+    if (customerId && remainingBalance > 0) {
+      try {
+        await Customer.findByIdAndUpdate(customerId, {
+          $inc: {
+            balance: remainingBalance,
+            totalSpent: grandTotal,
+            totalPurchases: 1,
+          },
+          $set: { lastPurchaseDate: new Date() },
+        });
+      } catch (custErr) {
+        console.warn('Customer ledger update notice:', custErr.message);
+      }
+    }
+
+    return NextResponse.json({ success: true, message: 'Sale completed', sale }, { status: 201 });
+  } catch (error) {
+    console.error('Sales POST error:', error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  }
 }

@@ -1,85 +1,99 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
+import connectDB from '../../../lib/db';
 import { verifyAuth } from '../../../lib/authHelper';
 import Product from '../../../models/Product';
 import StockMovement from '../../../models/StockMovement';
 
 export async function GET(request) {
-  const auth = await verifyAuth(request);
-  if (auth.error) {
-    return NextResponse.json({ success: false, message: auth.error }, { status: auth.status });
+  try {
+    const auth = await verifyAuth(request);
+    if (auth.error) {
+      return NextResponse.json({ success: false, message: auth.error }, { status: auth.status });
+    }
+
+    await connectDB();
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get('search');
+    const category = searchParams.get('category');
+    const lowStock = searchParams.get('lowStock');
+
+    const query = { isArchived: false };
+
+    if (search && search.trim()) {
+      const regex = new RegExp(search.trim(), 'i');
+      query.$or = [{ name: regex }, { nameUrdu: regex }, { category: regex }];
+    }
+
+    if (category && category !== 'all' && category !== 'All') {
+      query.category = category;
+    }
+
+    if (lowStock === 'true') {
+      query.$expr = { $lte: ['$currentStock', '$minStockAlert'] };
+    }
+
+    const products = await Product.find(query).sort({ updatedAt: -1 }).lean();
+    return NextResponse.json({ success: true, count: products.length, products });
+  } catch (error) {
+    console.error('Products GET error:', error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
-
-  const { searchParams } = new URL(request.url);
-  const search = searchParams.get('search');
-  const category = searchParams.get('category');
-  const lowStock = searchParams.get('lowStock');
-
-  const query = { isArchived: false };
-
-  if (search && search.trim()) {
-    const regex = new RegExp(search.trim(), 'i');
-    query.$or = [{ name: regex }, { nameUrdu: regex }, { category: regex }];
-  }
-
-  if (category && category !== 'all' && category !== 'All') {
-    query.category = category;
-  }
-
-  if (lowStock === 'true') {
-    query.$expr = { $lte: ['$currentStock', '$minStockAlert'] };
-  }
-
-  const products = await Product.find(query).sort({ updatedAt: -1 });
-  return NextResponse.json({ success: true, count: products.length, products });
 }
 
 export async function POST(request) {
-  const auth = await verifyAuth(request);
-  if (auth.error) {
-    return NextResponse.json({ success: false, message: auth.error }, { status: auth.status });
-  }
+  try {
+    const auth = await verifyAuth(request);
+    if (auth.error) {
+      return NextResponse.json({ success: false, message: auth.error }, { status: auth.status });
+    }
 
-  const body = await request.json();
-  const { name, nameUrdu, category, purchasePrice, sellingPrice, currentStock, unit, minStockAlert, variations } = body;
+    await connectDB();
+    const body = await request.json();
+    const { name, nameUrdu, category, purchasePrice, sellingPrice, currentStock, unit, minStockAlert, variations, productImage } = body;
 
-  let processedVariations = variations;
-  if (!processedVariations || processedVariations.length === 0) {
-    processedVariations = [
-      {
-        name: `1 ${unit || 'KG'}`,
-        unit: unit || 'KG',
-        multiplier: 1,
-        price: Number(sellingPrice),
-        isActive: true,
-      },
-    ];
-  }
+    let processedVariations = variations;
+    if (!processedVariations || processedVariations.length === 0) {
+      processedVariations = [
+        {
+          name: `1 ${unit || 'KG'}`,
+          unit: unit || 'KG',
+          multiplier: 1,
+          price: Number(sellingPrice) || 0,
+          isActive: true,
+        },
+      ];
+    }
 
-  const product = await Product.create({
-    name: name.trim(),
-    nameUrdu: (nameUrdu || '').trim(),
-    category: category || 'General Kiryana',
-    purchasePrice: Number(purchasePrice),
-    sellingPrice: Number(sellingPrice),
-    currentStock: Number(currentStock) || 0,
-    unit: (unit || 'KG').trim(),
-    minStockAlert: Number(minStockAlert) || 5,
-    variations: processedVariations,
-  });
-
-  if (Number(currentStock) > 0) {
-    await StockMovement.create({
-      product: product._id,
-      productName: product.name,
-      type: 'adjustment',
-      quantityChange: Number(currentStock),
-      baseUnit: product.unit,
-      previousStock: 0,
-      newStock: Number(currentStock),
-      notes: 'Initial Stock on Creation',
+    const product = await Product.create({
+      name: name.trim(),
+      nameUrdu: (nameUrdu || '').trim(),
+      category: category || 'General Kiryana',
+      productImage: productImage || '',
+      purchasePrice: Number(purchasePrice) || 0,
+      sellingPrice: Number(sellingPrice) || 0,
+      currentStock: Number(currentStock) || 0,
+      unit: unit || 'KG',
+      minStockAlert: Number(minStockAlert) || 5,
+      variations: processedVariations,
     });
-  }
 
-  return NextResponse.json({ success: true, message: 'Product created', product }, { status: 201 });
+    if (Number(currentStock) > 0) {
+      await StockMovement.create({
+        product: product._id,
+        productName: product.name,
+        type: 'purchase',
+        quantityChange: Number(currentStock),
+        baseUnit: product.unit,
+        previousStock: 0,
+        newStock: Number(currentStock),
+        notes: 'Initial Product Stock',
+      });
+    }
+
+    return NextResponse.json({ success: true, message: 'Product created successfully', product }, { status: 201 });
+  } catch (error) {
+    console.error('Products POST error:', error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  }
 }

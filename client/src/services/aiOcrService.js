@@ -52,14 +52,18 @@ export async function parseInvoiceImages(imageFiles) {
     throw new Error('AI_OCR_API_KEY is not configured in environment.');
   }
 
-  const primaryModel = process.env.AI_OCR_MODEL || 'gemini-3.5-flash';
+  // Discard any deprecated model name (especially gemini-2.5-*)
+  let configuredModel = process.env.AI_OCR_MODEL;
+  if (!configuredModel || configuredModel.includes('2.5')) {
+    configuredModel = 'gemini-3.5-flash';
+  }
+
   const candidateModels = [
-    primaryModel,
+    configuredModel,
     'gemini-3.5-flash',
     'gemini-3.8-flash',
     'gemini-flash-latest',
-    'gemini-3.1-flash-lite',
-  ].filter((v, i, a) => a.indexOf(v) === i);
+  ].filter((v, i, a) => a.indexOf(v) === i && !v.includes('2.5'));
 
   const parts = [{ text: PROMPT_TEXT }];
 
@@ -89,7 +93,7 @@ export async function parseInvoiceImages(imageFiles) {
     try {
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout per model
+      const timeoutId = setTimeout(() => controller.abort(), 14000); // 14s fast timeout per attempt
 
       const response = await fetch(apiUrl, {
         method: 'POST',
