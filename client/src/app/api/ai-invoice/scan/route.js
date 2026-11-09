@@ -36,7 +36,7 @@ export async function POST(request) {
 
     const result = await parseInvoiceImages(imageFiles);
 
-    return NextResponse.json({ success: true, invoice: result });
+    return NextResponse.json({ success: true, data: result, invoice: result });
   } catch (error) {
     console.error('AI Invoice Scan error:', error);
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });

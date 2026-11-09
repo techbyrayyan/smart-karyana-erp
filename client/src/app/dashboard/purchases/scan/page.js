@@ -92,15 +92,16 @@ export default function AiScanPage() {
       });
 
       const res = await aiInvoiceApi.scanInvoice(formData);
+      const invoiceResult = res.data || res.invoice;
 
-      if (res.success && res.data) {
-        setInvoiceData(res.data);
-        setSupplierName(res.data.supplierName || 'General Supplier');
-        setInvoiceNumber(res.data.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`);
-        setInvoiceDate(res.data.invoiceDate || new Date().toISOString().split('T')[0]);
-        setNotes(res.data.notes || '');
+      if (res.success && invoiceResult) {
+        setInvoiceData(invoiceResult);
+        setSupplierName(invoiceResult.supplierName || 'General Supplier');
+        setInvoiceNumber(invoiceResult.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`);
+        setInvoiceDate(invoiceResult.invoiceDate || new Date().toISOString().split('T')[0]);
+        setNotes(invoiceResult.notes || '');
         // Enrich extracted items with high-res grocery images
-        const enrichedItems = (res.data.items || []).map((item) => ({
+        const enrichedItems = (invoiceResult.items || []).map((item) => ({
           ...item,
           productImage: item.productImage || getProductImage(item.productName, item.category),
         }));

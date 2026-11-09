@@ -13,8 +13,14 @@ async function parseInvoiceImage(filePaths) {
     throw new Error('AI_OCR_API_KEY is not configured in server environment.');
   }
 
-  const model = process.env.AI_OCR_MODEL || 'gemini-2.5-flash';
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const primaryModel = process.env.AI_OCR_MODEL || 'gemini-3.5-flash';
+  const candidateModels = [
+    primaryModel,
+    'gemini-3.5-flash',
+    'gemini-3.8-flash',
+    'gemini-flash-latest',
+    'gemini-3.1-flash-lite',
+  ].filter((v, i, a) => a.indexOf(v) === i);
 
   // Build parts with text prompt and images
   const parts = [];
@@ -90,20 +96,42 @@ Important parsing rules:
     },
   };
 
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
+  let data = null;
+  let lastError = null;
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Google AI OCR Vision API error (${response.status}): ${errText}`);
+  for (const model of candidateModels) {
+    try {
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const json = await response.json();
+        if (json?.candidates?.[0]?.content?.parts?.[0]?.text) {
+          data = json;
+          break;
+        }
+      } else {
+        const errText = await response.text();
+        lastError = new Error(`Google AI OCR Vision API error (${response.status}): ${errText}`);
+      }
+    } catch (err) {
+      lastError = err;
+    }
   }
 
-  const data = await response.json();
+  if (!data) {
+    throw lastError || new Error('AI OCR API did not return readable candidates from any model.');
+  }
+
   const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
   if (!rawText) {
