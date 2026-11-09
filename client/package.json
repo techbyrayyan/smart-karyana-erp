@@ -1,0 +1,28 @@
+{
+  "name": "smart-khata-client",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"node ../server/src/server.js\" \"next dev -p 3000\"",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "clsx": "^2.1.1",
+    "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^0.460.0",
+    "mongoose": "^9.12.0",
+    "next": "^14.2.18",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.4"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^10.0.7",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15"
+  }
+}
