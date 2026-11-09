@@ -188,3 +188,17 @@ export const reportApi = {
     return apiRequest(`/reports/financial${query ? `?${query}` : ''}`);
   },
 };
+
+// Categories API
+export const categoryApi = {
+  getAll: () => apiRequest('/categories'),
+  create: (data) =>
+    apiRequest('/categories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  delete: (id) =>
+    apiRequest(`/categories?id=${id}`, {
+      method: 'DELETE',
+    }),
+};

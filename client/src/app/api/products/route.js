@@ -4,6 +4,7 @@ import connectDB from '../../../lib/db';
 import { verifyAuth } from '../../../lib/authHelper';
 import Product from '../../../models/Product';
 import StockMovement from '../../../models/StockMovement';
+import Category from '../../../models/Category';
 
 export async function GET(request) {
   try {
@@ -65,10 +66,25 @@ export async function POST(request) {
       ];
     }
 
+    const trimmedCategory = (category || 'General Kiryana').trim();
+
+    // Auto-register category if not present
+    if (trimmedCategory) {
+      try {
+        await Category.findOneAndUpdate(
+          { name: { $regex: new RegExp(`^${trimmedCategory.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } },
+          { $setOnInsert: { name: trimmedCategory } },
+          { upsert: true }
+        );
+      } catch (catErr) {
+        // non-blocking
+      }
+    }
+
     const product = await Product.create({
       name: name.trim(),
       nameUrdu: (nameUrdu || '').trim(),
-      category: category || 'General Kiryana',
+      category: trimmedCategory,
       productImage: productImage || '',
       purchasePrice: Number(purchasePrice) || 0,
       sellingPrice: Number(sellingPrice) || 0,

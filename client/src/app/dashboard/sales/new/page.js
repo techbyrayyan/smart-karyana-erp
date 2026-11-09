@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import MobileAppShell from '../../../../components/layout/MobileAppShell';
 import { useLanguage } from '../../../../context/LanguageContext';
 import { useAuth } from '../../../../context/AuthContext';
-import { productApi, customerApi, saleApi } from '../../../../lib/api';
+import { productApi, customerApi, saleApi, categoryApi } from '../../../../lib/api';
 import ThermalReceipt from '../../../../components/receipt/ThermalReceipt';
 import { getProductImage } from '../../../../lib/productImages';
 import {
@@ -22,6 +22,7 @@ import {
   ChevronDown,
   Printer,
   X,
+  Package,
 } from 'lucide-react';
 
 export default function NewSalePage() {
@@ -32,6 +33,8 @@ export default function NewSalePage() {
   // Search & Products
   const [productSearch, setProductSearch] = useState('');
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedProduct, setSelectedProduct] = useState(null); // for variation selection modal
   const [cart, setCart] = useState([]);
 
@@ -55,20 +58,37 @@ export default function NewSalePage() {
   const [completedSale, setCompletedSale] = useState(null);
   const [error, setError] = useState('');
 
-  // Fetch products matching search
+  // Fetch categories
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const res = await categoryApi.getAll();
+        if (res.success && res.categories) {
+          setCategories(res.categories || []);
+        }
+      } catch (e) {}
+    };
+    fetchCategories();
+  }, []);
+
+  // Fetch products matching search & category
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await productApi.getAll({ search: productSearch });
+        const params = {};
+        if (productSearch) params.search = productSearch;
+        if (selectedCategory && selectedCategory !== 'All') params.category = selectedCategory;
+
+        const res = await productApi.getAll(params);
         if (res.success) {
           setProducts(res.products || []);
         }
       } catch (e) {}
     };
 
-    const delay = setTimeout(fetchProducts, 200);
+    const delay = setTimeout(fetchProducts, 150);
     return () => clearTimeout(delay);
-  }, [productSearch]);
+  }, [productSearch, selectedCategory]);
 
   // Fetch customers
   useEffect(() => {
@@ -280,6 +300,51 @@ export default function NewSalePage() {
             </div>
           </div>
 
+          {/* Dynamic Category Selector Bar (Pehle Category Select Karein: e.g. Rice, Atta) */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-bold text-gray-700">1. Select Category (کیٹیگری چنیں)</span>
+              {selectedCategory !== 'All' && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('All')}
+                  className="text-[10px] text-kiryana-freshGreen font-bold hover:underline"
+                >
+                  View All
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('All')}
+                className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap flex-shrink-0 transition-colors ${
+                  selectedCategory === 'All'
+                    ? 'bg-kiryana-darkGreen text-white shadow-sm'
+                    : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                All Items
+              </button>
+
+              {categories.map((cat) => (
+                <button
+                  key={cat._id || cat.name}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat.name)}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap flex-shrink-0 transition-colors ${
+                    selectedCategory === cat.name
+                      ? 'bg-kiryana-freshGreen text-white shadow-sm font-bold'
+                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {cat.name} {cat.nameUrdu ? `(${cat.nameUrdu})` : ''}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Product Fast Search Input */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 rtl:left-auto rtl:right-0 pl-3.5 rtl:pr-3.5 flex items-center pointer-events-none text-gray-400">
@@ -289,18 +354,40 @@ export default function NewSalePage() {
               type="text"
               value={productSearch}
               onChange={(e) => setProductSearch(e.target.value)}
-              placeholder={t('searchProducts')}
+              placeholder={selectedCategory === 'All' ? t('searchProducts') : `Search inside "${selectedCategory}"...`}
               className="w-full bg-white border border-gray-200 rounded-xl py-2.5 pl-10 pr-3 rtl:pr-10 rtl:pl-3 text-xs focus:outline-none focus:border-kiryana-freshGreen shadow-sm"
             />
+            {productSearch && (
+              <button
+                type="button"
+                onClick={() => setProductSearch('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 text-xs"
+              >
+                Clear
+              </button>
+            )}
           </div>
 
-          {/* Product Search Results Dropdown List */}
-          {productSearch && (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-lg max-h-56 overflow-y-auto divide-y divide-gray-100">
-              {products.length === 0 ? (
-                <div className="p-3 text-center text-xs text-gray-400">No products matched</div>
-              ) : (
-                products.map((p) => (
+          {/* Fast Category Item Grid / Quick Tapper */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-card-soft p-3 space-y-2">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
+              <span className="text-[11px] font-bold text-gray-800">
+                2. Tap Item to Add (
+                {selectedCategory === 'All' ? 'All Products' : `${selectedCategory} کی آئٹمز`}
+                )
+              </span>
+              <span className="text-[10px] text-gray-400 font-medium">
+                {products.length} {products.length === 1 ? 'item' : 'items'}
+              </span>
+            </div>
+
+            {products.length === 0 ? (
+              <div className="py-5 text-center text-gray-400 text-xs">
+                No products found {selectedCategory !== 'All' ? `under "${selectedCategory}"` : ''}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-0.5">
+                {products.map((p) => (
                   <div
                     key={p._id}
                     onClick={() => {
@@ -314,40 +401,39 @@ export default function NewSalePage() {
                           price: p.sellingPrice,
                         };
                         addItemToCart(p, defaultVar);
-                        setProductSearch('');
                       }
                     }}
-                    className="p-2.5 flex items-center justify-between hover:bg-kiryana-lightGreen/30 cursor-pointer transition-colors gap-2.5"
+                    className="p-2 bg-kiryana-softBg hover:bg-emerald-50 border border-gray-200 hover:border-emerald-300 rounded-xl cursor-pointer transition-all active:scale-98 flex items-center gap-2"
                   >
-                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                      <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 border border-gray-200">
-                        <img
-                          src={p.productImage || getProductImage(p.name, p.category)}
-                          alt={p.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80';
-                          }}
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-bold text-gray-900 truncate">{p.name}</div>
-                        <div className="text-[10px] text-gray-500">
-                          Stock: {p.currentStock} {p.unit} • {p.variations?.length || 1} Variations
-                        </div>
-                      </div>
+                    <div className="w-9 h-9 rounded-lg overflow-hidden bg-white flex-shrink-0 border border-gray-200">
+                      <img
+                        src={p.productImage || getProductImage(p.name, p.category)}
+                        alt={p.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80';
+                        }}
+                      />
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <span className="text-xs font-black text-kiryana-darkGreen">
-                        Rs. {p.sellingPrice}
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-bold text-gray-900 block truncate leading-tight">
+                        {p.name}
                       </span>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-[11px] font-extrabold text-kiryana-darkGreen font-mono">
+                          Rs. {p.sellingPrice}
+                        </span>
+                        <span className="text-[9px] text-gray-500 font-medium">
+                          {p.currentStock} {p.unit}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Cart Table / Items */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-card-soft p-3.5 space-y-3">

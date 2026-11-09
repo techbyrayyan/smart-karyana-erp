@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import MobileAppShell from '../../../../components/layout/MobileAppShell';
 import { useLanguage } from '../../../../context/LanguageContext';
-import { productApi } from '../../../../lib/api';
+import { productApi, categoryApi } from '../../../../lib/api';
 import {
   Edit2,
   Trash2,
@@ -16,19 +16,11 @@ import {
   TrendingDown,
   TrendingUp,
   RotateCcw,
+  FolderPlus,
+  X,
 } from 'lucide-react';
 
-const CATEGORIES = [
-  'Atta / Grains',
-  'Daalen / Pulses',
-  'Ghee / Cooking Oil',
-  'Spices / Masalay',
-  'Beverages / Chai',
-  'Dairy',
-  'Snacks & Biscuits',
-  'Soaps & Detergents',
-  'General Kiryana',
-];
+const UNITS = ['KG', 'Gram', 'Liter', 'ML', 'Piece', 'Packet', 'Dozen', 'Box', 'Bori'];
 
 export default function ProductDetailPage() {
   const router = useRouter();
@@ -40,6 +32,12 @@ export default function ProductDetailPage() {
 
   const [product, setProduct] = useState(null);
   const [movements, setMovements] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatUrdu, setNewCatUrdu] = useState('');
+  const [categoryError, setCategoryError] = useState('');
+
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(isEditDefault);
   const [saveLoading, setSaveLoading] = useState(false);
@@ -55,6 +53,47 @@ export default function ProductDetailPage() {
   const [unit, setUnit] = useState('KG');
   const [minStockAlert, setMinStockAlert] = useState('5');
   const [variations, setVariations] = useState([]);
+
+  const loadCategories = async () => {
+    try {
+      const res = await categoryApi.getAll();
+      if (res.success && res.categories) {
+        setCategories(res.categories);
+      }
+    } catch (e) {
+      console.error('Error fetching categories:', e);
+    }
+  };
+
+  const handleCreateCategory = async (e) => {
+    if (e) e.preventDefault();
+    if (!newCatName.trim()) {
+      setCategoryError('Category name is required');
+      return;
+    }
+    setCategoryError('');
+
+    try {
+      const res = await categoryApi.create({
+        name: newCatName.trim(),
+        nameUrdu: newCatUrdu.trim(),
+      });
+
+      if (res.success && res.category) {
+        const created = res.category;
+        setCategories((prev) => {
+          const exists = prev.some((c) => c.name.toLowerCase() === created.name.toLowerCase());
+          return exists ? prev : [...prev, created];
+        });
+        setCategory(created.name);
+        setNewCatName('');
+        setNewCatUrdu('');
+        setShowNewCategoryModal(false);
+      }
+    } catch (err) {
+      setCategoryError(err.message || 'Error creating category');
+    }
+  };
 
   const fetchProduct = async () => {
     try {
@@ -82,6 +121,7 @@ export default function ProductDetailPage() {
   };
 
   useEffect(() => {
+    loadCategories();
     if (params.id) {
       fetchProduct();
     }
@@ -237,29 +277,102 @@ export default function ProductDetailPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">{t('category')}</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full bg-kiryana-softBg border border-gray-200 rounded-xl py-2 px-2 text-xs"
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-gray-700">{t('category')}</label>
+                <button
+                  type="button"
+                  onClick={() => setShowNewCategoryModal(true)}
+                  className="text-[10px] text-kiryana-freshGreen font-bold flex items-center gap-0.5 hover:underline"
                 >
-                  {CATEGORIES.filter((c) => c !== 'All').map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                  <Plus className="w-3 h-3" /> + Nayi Category
+                </button>
               </div>
+              <select
+                value={category}
+                onChange={(e) => {
+                  if (e.target.value === '__NEW__') {
+                    setShowNewCategoryModal(true);
+                  } else {
+                    setCategory(e.target.value);
+                  }
+                }}
+                className="w-full bg-kiryana-softBg border border-gray-200 rounded-xl py-2 px-2 text-xs font-medium text-gray-900"
+              >
+                {category && !categories.some((c) => c.name === category) && (
+                  <option value={category}>{category}</option>
+                )}
+                {categories.map((c) => (
+                  <option key={c._id || c.name} value={c.name}>
+                    {c.name} {c.nameUrdu ? `(${c.nameUrdu})` : ''}
+                  </option>
+                ))}
+                <option value="__NEW__">+ Add New Category / Other...</option>
+              </select>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">{t('unit')}</label>
-                <input
-                  type="text"
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
-                  className="w-full bg-kiryana-softBg border border-gray-200 rounded-xl py-2 px-3 text-xs"
-                />
-              </div>
+              {showNewCategoryModal && (
+                <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-emerald-900">+ Create Category</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewCategoryModal(false)}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  {categoryError && (
+                    <p className="text-[10px] text-red-600">{categoryError}</p>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      placeholder="Category (e.g. Rice)"
+                      value={newCatName}
+                      onChange={(e) => setNewCatName(e.target.value)}
+                      className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-xs"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Urdu (چاول)"
+                      dir="rtl"
+                      value={newCatUrdu}
+                      onChange={(e) => setNewCatUrdu(e.target.value)}
+                      className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-xs font-urdu text-right"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowNewCategoryModal(false)}
+                      className="text-[10px] px-2 py-1 text-gray-500"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCreateCategory}
+                      className="text-[10px] bg-kiryana-freshGreen text-white font-bold px-2.5 py-1 rounded-md"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">{t('unit')}</label>
+              <select
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                className="w-full bg-kiryana-softBg border border-gray-200 rounded-xl py-2 px-2 text-xs"
+              >
+                {UNITS.map((u) => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </select>
             </div>
 
             <div className="grid grid-cols-2 gap-2">

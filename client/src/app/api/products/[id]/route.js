@@ -4,6 +4,7 @@ import connectDB from '../../../../lib/db';
 import { verifyAuth } from '../../../../lib/authHelper';
 import Product from '../../../../models/Product';
 import StockMovement from '../../../../models/StockMovement';
+import Category from '../../../../models/Category';
 
 export async function GET(request, { params }) {
   try {
@@ -52,6 +53,17 @@ export async function PUT(request, { params }) {
         newStock: Number(body.currentStock),
         notes: 'Manual Stock Correction',
       });
+    }
+
+    if (body.category && typeof body.category === 'string') {
+      const catTrim = body.category.trim();
+      try {
+        await Category.findOneAndUpdate(
+          { name: { $regex: new RegExp(`^${catTrim.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } },
+          { $setOnInsert: { name: catTrim } },
+          { upsert: true }
+        );
+      } catch (e) {}
     }
 
     Object.assign(product, body);

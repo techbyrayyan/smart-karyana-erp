@@ -1,23 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import MobileAppShell from '../../../../components/layout/MobileAppShell';
 import { useLanguage } from '../../../../context/LanguageContext';
-import { productApi } from '../../../../lib/api';
-import { Plus, Trash2, Sparkles, Check, ArrowLeft } from 'lucide-react';
-
-const CATEGORIES = [
-  'Atta / Grains',
-  'Daalen / Pulses',
-  'Ghee / Cooking Oil',
-  'Spices / Masalay',
-  'Beverages / Chai',
-  'Dairy',
-  'Snacks & Biscuits',
-  'Soaps & Detergents',
-  'General Kiryana',
-];
+import { productApi, categoryApi } from '../../../../lib/api';
+import { Plus, Trash2, Sparkles, Check, ArrowLeft, FolderPlus, X } from 'lucide-react';
 
 const UNITS = ['KG', 'Gram', 'Liter', 'ML', 'Piece', 'Packet', 'Dozen', 'Box', 'Bori'];
 
@@ -25,9 +13,16 @@ export default function AddProductPage() {
   const router = useRouter();
   const { t, language } = useLanguage();
 
+  const [categories, setCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatUrdu, setNewCatUrdu] = useState('');
+  const [categoryError, setCategoryError] = useState('');
+
   const [name, setName] = useState('');
   const [nameUrdu, setNameUrdu] = useState('');
-  const [category, setCategory] = useState('Atta / Grains');
+  const [category, setCategory] = useState('');
   const [unit, setUnit] = useState('KG');
   const [purchasePrice, setPurchasePrice] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
@@ -40,6 +35,59 @@ export default function AddProductPage() {
   const [variations, setVariations] = useState([
     { name: '1 KG', unit: 'KG', multiplier: 1, price: '' },
   ]);
+
+  // Load existing categories from backend
+  const loadCategories = async () => {
+    try {
+      setCategoriesLoading(true);
+      const res = await categoryApi.getAll();
+      if (res.success && res.categories) {
+        setCategories(res.categories);
+        if (res.categories.length > 0 && !category) {
+          setCategory(res.categories[0].name);
+        }
+      }
+    } catch (e) {
+      console.error('Error loading categories:', e);
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  // Handle creating a new category on the fly
+  const handleCreateCategory = async (e) => {
+    if (e) e.preventDefault();
+    if (!newCatName.trim()) {
+      setCategoryError('Category name is required');
+      return;
+    }
+    setCategoryError('');
+
+    try {
+      const res = await categoryApi.create({
+        name: newCatName.trim(),
+        nameUrdu: newCatUrdu.trim(),
+      });
+
+      if (res.success && res.category) {
+        const createdCat = res.category;
+        setCategories((prev) => {
+          const exists = prev.some((c) => c.name.toLowerCase() === createdCat.name.toLowerCase());
+          return exists ? prev : [...prev, createdCat];
+        });
+        setCategory(createdCat.name);
+        setNewCatName('');
+        setNewCatUrdu('');
+        setShowNewCategoryModal(false);
+      }
+    } catch (err) {
+      setCategoryError(err.message || 'Error creating category');
+    }
+  };
 
   // When base selling price changes, sync default variation price
   const handleBasePriceChange = (val) => {
@@ -114,8 +162,13 @@ export default function AddProductPage() {
     e.preventDefault();
     setError('');
 
+    if (!category.trim()) {
+      setError('Please select or create a Category (e.g. Rice, Atta, Ghee)');
+      return;
+    }
+
     if (!name.trim()) {
-      setError('Product name is required');
+      setError('Product item name is required (e.g. Rice Tota, Super Karnal)');
       return;
     }
 
@@ -130,7 +183,7 @@ export default function AddProductPage() {
       const payload = {
         name: name.trim(),
         nameUrdu: nameUrdu.trim(),
-        category,
+        category: category.trim(),
         purchasePrice: Number(purchasePrice),
         sellingPrice: Number(sellingPrice),
         currentStock: Number(currentStock) || 0,
@@ -165,58 +218,168 @@ export default function AddProductPage() {
           </div>
         )}
 
-        {/* Basic Info Card */}
+        {/* Category Selection & Fast Creation */}
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-card-soft space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+              <span>Category (کیٹیگری)</span>
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowNewCategoryModal(true)}
+              className="text-[11px] font-bold text-kiryana-freshGreen bg-kiryana-lightGreen hover:bg-emerald-100 px-2.5 py-1 rounded-xl flex items-center gap-1 transition-colors"
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+              <span>+ Nayi Category</span>
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">
+              Select Category *
+            </label>
+            <div className="flex gap-2">
+              <select
+                value={category}
+                onChange={(e) => {
+                  if (e.target.value === '__NEW__') {
+                    setShowNewCategoryModal(true);
+                  } else {
+                    setCategory(e.target.value);
+                  }
+                }}
+                className="flex-1 bg-kiryana-softBg border border-gray-200 rounded-xl py-2.5 px-3 text-xs focus:outline-none focus:border-kiryana-freshGreen font-medium text-gray-900"
+              >
+                {categories.length === 0 && (
+                  <option value="">No categories yet - Add below</option>
+                )}
+                {categories.map((c) => (
+                  <option key={c._id || c.name} value={c.name}>
+                    {c.name} {c.nameUrdu ? `(${c.nameUrdu})` : ''}
+                  </option>
+                ))}
+                <option value="__NEW__">+ Add New Category / Other...</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={() => setShowNewCategoryModal(true)}
+                className="p-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-700"
+                title="Add New Category"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            {category && (
+              <p className="text-[11px] text-emerald-700 mt-1 font-medium">
+                Active Category: <strong className="text-emerald-800">{category}</strong>
+              </p>
+            )}
+          </div>
+
+          {/* Inline Add Category Card */}
+          {showNewCategoryModal && (
+            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2.5 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-900">
+                  + Create New Category
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowNewCategoryModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {categoryError && (
+                <p className="text-[10px] text-red-600 font-semibold">{categoryError}</p>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-700 block mb-0.5">
+                    Category Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                    placeholder="e.g. Rice, Atta, Ghee"
+                    className="w-full bg-white border border-gray-200 rounded-lg py-1.5 px-2.5 text-xs focus:outline-none focus:border-kiryana-freshGreen"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-700 block mb-0.5">
+                    Urdu Name (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={newCatUrdu}
+                    onChange={(e) => setNewCatUrdu(e.target.value)}
+                    placeholder="مثلاً: چاول، آٹا"
+                    dir="rtl"
+                    className="w-full bg-white border border-gray-200 rounded-lg py-1.5 px-2.5 text-xs font-urdu text-right focus:outline-none focus:border-kiryana-freshGreen"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowNewCategoryModal(false)}
+                  className="px-3 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateCategory}
+                  className="px-3 py-1 text-xs bg-kiryana-freshGreen text-white font-bold rounded-lg shadow-sm"
+                >
+                  Save Category
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Product Item Info Card */}
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-card-soft space-y-3">
           <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
-            General Information
+            Product Item Details (پروڈکٹ کی تفصیل)
           </h3>
 
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1">
-              {t('productName')} *
+              Item Name * (e.g. Rice Tota, Super Karnal Basmati)
             </label>
             <input
               type="text"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Super Basmati Rice"
+              placeholder="e.g. Super Karnal Basmati / Rice Tota"
               className="w-full bg-kiryana-softBg border border-gray-200 rounded-xl py-2.5 px-3 text-xs focus:outline-none focus:border-kiryana-freshGreen"
             />
           </div>
 
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1">
-              {t('productNameUrdu')}
+              {t('productNameUrdu')} (اردو نام)
             </label>
             <input
               type="text"
               value={nameUrdu}
               onChange={(e) => setNameUrdu(e.target.value)}
-              placeholder="مثلاً: سپر باسمتی چاول"
+              placeholder="مثلاً: ٹوٹا چاول / سپر کرنل باسمتی"
               dir="rtl"
               className="w-full bg-kiryana-softBg border border-gray-200 rounded-xl py-2.5 px-3 text-xs font-urdu focus:outline-none focus:border-kiryana-freshGreen text-right"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-2.5">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                {t('category')}
-              </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full bg-kiryana-softBg border border-gray-200 rounded-xl py-2.5 px-2 text-xs focus:outline-none focus:border-kiryana-freshGreen"
-              >
-                {CATEGORIES.filter((c) => c !== 'All').map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 {t('unit')}
@@ -233,13 +396,27 @@ export default function AddProductPage() {
                 ))}
               </select>
             </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                {t('minStockAlertQty')}
+              </label>
+              <input
+                type="number"
+                step="any"
+                value={minStockAlert}
+                onChange={(e) => setMinStockAlert(e.target.value)}
+                placeholder="5"
+                className="w-full bg-kiryana-softBg border border-gray-200 rounded-xl py-2.5 px-3 text-xs focus:outline-none focus:border-kiryana-freshGreen font-mono"
+              />
+            </div>
           </div>
         </div>
 
         {/* Pricing & Stock Card */}
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-card-soft space-y-3">
           <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
-            Pricing & Stock
+            Pricing & Stock (قیمت اور اسٹاک)
           </h3>
 
           <div className="grid grid-cols-2 gap-2.5">
@@ -274,43 +451,27 @@ export default function AddProductPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Current Stock ({unit})
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={currentStock}
-                onChange={(e) => setCurrentStock(e.target.value)}
-                placeholder="e.g. 50"
-                className="w-full bg-kiryana-softBg border border-gray-200 rounded-xl py-2.5 px-3 text-xs focus:outline-none focus:border-kiryana-freshGreen font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                {t('minStockAlertQty')}
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={minStockAlert}
-                onChange={(e) => setMinStockAlert(e.target.value)}
-                placeholder="5"
-                className="w-full bg-kiryana-softBg border border-gray-200 rounded-xl py-2.5 px-3 text-xs focus:outline-none focus:border-kiryana-freshGreen font-mono"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">
+              Opening Stock ({unit})
+            </label>
+            <input
+              type="number"
+              step="any"
+              value={currentStock}
+              onChange={(e) => setCurrentStock(e.target.value)}
+              placeholder="e.g. 50"
+              className="w-full bg-kiryana-softBg border border-gray-200 rounded-xl py-2.5 px-3 text-xs focus:outline-none focus:border-kiryana-freshGreen font-mono"
+            />
           </div>
         </div>
 
-        {/* Multiple Weight / Quantity Variations Card (Key Requirement!) */}
+        {/* Multiple Weight / Quantity Variations Card */}
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-card-soft space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
-                {t('variations')}
+                {t('variations')} (وزن اور پیکنگ کی مختلف قیمتیں)
               </h3>
               <p className="text-[10px] text-gray-500">
                 Example: 1 KG, 500g, 250g with independent prices
@@ -349,25 +510,23 @@ export default function AddProductPage() {
                       type="number"
                       step="any"
                       required
-                      placeholder="Multiplier (e.g. 0.5)"
-                      value={v.multiplier}
-                      onChange={(e) => updateVariation(idx, 'multiplier', e.target.value)}
-                      className="w-24 bg-white border border-gray-200 rounded-lg py-1.5 px-2 text-xs font-mono"
-                      title="Multiplier to base unit (e.g. 500g = 0.5 of KG)"
+                      placeholder="Price (Rs.)"
+                      value={v.price}
+                      onChange={(e) => updateVariation(idx, 'price', e.target.value)}
+                      className="w-24 bg-white border border-gray-200 rounded-lg py-1.5 px-2 text-xs font-mono font-bold text-gray-900"
                     />
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-gray-500">Price (Rs):</span>
+                  <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                    <span>Base fraction:</span>
                     <input
                       type="number"
                       step="any"
-                      required
-                      placeholder="Selling Price"
-                      value={v.price}
-                      onChange={(e) => updateVariation(idx, 'price', e.target.value)}
-                      className="w-full bg-white border border-gray-200 rounded-lg py-1.5 px-2 text-xs font-mono font-bold text-kiryana-darkGreen"
+                      value={v.multiplier}
+                      onChange={(e) => updateVariation(idx, 'multiplier', e.target.value)}
+                      className="w-16 bg-white border border-gray-200 rounded px-1 text-[10px]"
                     />
+                    <span>{unit}</span>
                   </div>
                 </div>
 
@@ -375,50 +534,40 @@ export default function AddProductPage() {
                   <button
                     type="button"
                     onClick={() => removeVariationRow(idx)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg"
+                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
             ))}
-
-            <button
-              type="button"
-              onClick={addVariationRow}
-              className="w-full py-2 bg-gray-50 hover:bg-gray-100 border border-dashed border-gray-300 rounded-xl text-xs font-bold text-gray-700 flex items-center justify-center gap-1 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{t('addVariation')}</span>
-            </button>
           </div>
-        </div>
 
-        {/* Submit / Cancel Buttons */}
-        <div className="grid grid-cols-2 gap-2.5 pt-2">
           <button
             type="button"
-            onClick={() => router.back()}
-            className="w-full py-3 px-4 rounded-xl border border-gray-300 text-gray-700 font-bold text-xs hover:bg-gray-50 active:scale-98 transition-all"
+            onClick={addVariationRow}
+            className="w-full py-2 bg-gray-50 border border-dashed border-gray-300 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 flex items-center justify-center gap-1.5 transition-colors"
           >
-            {t('cancel')}
-          </button>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 px-4 rounded-xl bg-kiryana-freshGreen hover:bg-kiryana-darkGreen text-white font-bold text-xs shadow-md active:scale-98 transition-all flex items-center justify-center gap-1.5"
-          >
-            {loading ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            ) : (
-              <>
-                <Check className="w-4 h-4" />
-                <span>{t('save')}</span>
-              </>
-            )}
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Add Another Packing / Weight Variation</span>
           </button>
         </div>
+
+        {/* Submit Button */}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-3.5 bg-kiryana-freshGreen text-white font-bold rounded-2xl shadow-lg hover:bg-kiryana-darkGreen active:scale-98 transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-60"
+        >
+          {loading ? (
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <>
+              <Check className="w-4 h-4 stroke-[3]" />
+              <span>Save Product Under "{category || 'Category'}"</span>
+            </>
+          )}
+        </button>
       </form>
     </MobileAppShell>
   );

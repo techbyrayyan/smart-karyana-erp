@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import MobileAppShell from '../../../components/layout/MobileAppShell';
 import { useLanguage } from '../../../context/LanguageContext';
-import { productApi } from '../../../lib/api';
+import { productApi, categoryApi } from '../../../lib/api';
 import { getProductImage } from '../../../lib/productImages';
 import {
   Plus,
@@ -17,29 +17,36 @@ import {
   Package,
   Layers,
   Filter,
+  FolderPlus,
+  X,
 } from 'lucide-react';
-
-const CATEGORIES = [
-  'All',
-  'Atta / Grains',
-  'Daalen / Pulses',
-  'Ghee / Cooking Oil',
-  'Spices / Masalay',
-  'Beverages / Chai',
-  'Dairy',
-  'Snacks & Biscuits',
-  'Soaps & Detergents',
-  'General Kiryana',
-];
 
 export default function ProductsPage() {
   const { t, language } = useLanguage();
 
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+
+  // Category creation modal
+  const [showCatModal, setShowCatModal] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatUrdu, setNewCatUrdu] = useState('');
+  const [catError, setCatError] = useState('');
+
+  const fetchCategories = async () => {
+    try {
+      const res = await categoryApi.getAll();
+      if (res.success && res.categories) {
+        setCategories(res.categories);
+      }
+    } catch (e) {
+      console.error('Error fetching categories:', e);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -61,17 +68,48 @@ export default function ProductsPage() {
   };
 
   useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  useEffect(() => {
     const delayDebounce = setTimeout(() => {
       fetchProducts();
     }, 250);
     return () => clearTimeout(delayDebounce);
   }, [search, selectedCategory, showLowStockOnly]);
 
+  const handleCreateCategory = async (e) => {
+    if (e) e.preventDefault();
+    if (!newCatName.trim()) {
+      setCatError('Category name is required');
+      return;
+    }
+    setCatError('');
+
+    try {
+      const res = await categoryApi.create({
+        name: newCatName.trim(),
+        nameUrdu: newCatUrdu.trim(),
+      });
+
+      if (res.success && res.category) {
+        setNewCatName('');
+        setNewCatUrdu('');
+        setShowCatModal(false);
+        fetchCategories();
+        setSelectedCategory(res.category.name);
+      }
+    } catch (err) {
+      setCatError(err.message || 'Error creating category');
+    }
+  };
+
   const handleDelete = async (id, name) => {
     if (window.confirm(`${t('deleteConfirm')}\n"${name}"`)) {
       try {
         await productApi.delete(id);
         fetchProducts();
+        fetchCategories();
       } catch (err) {
         alert(err.message || 'Error deleting product');
       }
@@ -99,7 +137,7 @@ export default function ProductsPage() {
         </Link>
       </div>
 
-      {/* Search Input */}
+      {/* Fast Live Search Bar */}
       <div className="relative mb-3">
         <div className="absolute inset-y-0 left-0 rtl:left-auto rtl:right-0 pl-3.5 rtl:pr-3.5 flex items-center pointer-events-none text-gray-400">
           <Search className="w-4 h-4" />
@@ -108,13 +146,81 @@ export default function ProductsPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder={language === 'ur' ? 'چیز کا نام تلاش کریں...' : language === 'roman_ur' ? 'Samaan ka naam talaash karein...' : 'Search product name or category...'}
-          className="w-full bg-white border border-gray-200 rounded-xl py-2.5 pl-10 pr-3 rtl:pr-10 rtl:pl-3 text-xs focus:outline-none focus:border-kiryana-freshGreen shadow-sm"
+          placeholder={t('searchProducts')}
+          className="w-full bg-white border border-gray-200 rounded-2xl py-2.5 pl-10 pr-4 rtl:pr-10 rtl:pl-4 text-xs focus:outline-none focus:border-kiryana-freshGreen shadow-card-soft"
         />
+        {search && (
+          <button
+            onClick={() => setSearch('')}
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 text-xs"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
-      {/* Category Pills & Low Stock Toggle */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 mb-3">
+      {/* Category Creation Card Popup */}
+      {showCatModal && (
+        <div className="mb-3 p-3 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2 animate-fadeIn">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-900">+ Add New Category (نئی کیٹیگری بنائیں)</span>
+            <button
+              onClick={() => setShowCatModal(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {catError && <p className="text-[10px] text-red-600 font-bold">{catError}</p>}
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="text"
+              placeholder="e.g. Rice, Atta, Ghee"
+              value={newCatName}
+              onChange={(e) => setNewCatName(e.target.value)}
+              className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:border-kiryana-freshGreen"
+            />
+            <input
+              type="text"
+              placeholder="اردو نام: مثلاً چاول"
+              dir="rtl"
+              value={newCatUrdu}
+              onChange={(e) => setNewCatUrdu(e.target.value)}
+              className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs font-urdu text-right focus:outline-none focus:border-kiryana-freshGreen"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              onClick={() => setShowCatModal(false)}
+              className="px-2.5 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded-lg"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreateCategory}
+              className="px-3 py-1 text-xs bg-kiryana-freshGreen text-white font-bold rounded-lg shadow-sm"
+            >
+              Save Category
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic Categories Horizontal Scroll Bar */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-3 scrollbar-none">
+        {/* All Products Pill */}
+        <button
+          onClick={() => setSelectedCategory('All')}
+          className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap flex-shrink-0 transition-colors ${
+            selectedCategory === 'All'
+              ? 'bg-kiryana-darkGreen text-white shadow-sm'
+              : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+          }`}
+        >
+          All Items
+        </button>
+
+        {/* Low Stock Filter */}
         <button
           onClick={() => setShowLowStockOnly(!showLowStockOnly)}
           className={`px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1 flex-shrink-0 transition-colors ${
@@ -127,24 +233,37 @@ export default function ProductsPage() {
           <span>{t('lowStock')}</span>
         </button>
 
-        {CATEGORIES.map((cat) => (
+        {/* Dynamic Categories List */}
+        {categories.map((cat) => (
           <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
+            key={cat._id || cat.name}
+            onClick={() => setSelectedCategory(cat.name)}
             className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap flex-shrink-0 transition-colors ${
-              selectedCategory === cat
-                ? 'bg-kiryana-darkGreen text-white'
+              selectedCategory === cat.name
+                ? 'bg-kiryana-freshGreen text-white shadow-sm font-bold'
                 : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
             }`}
           >
-            {cat}
+            {cat.name} {cat.nameUrdu ? `(${cat.nameUrdu})` : ''}
           </button>
         ))}
+
+        {/* Quick Add Category Pill */}
+        <button
+          onClick={() => setShowCatModal(true)}
+          className="px-2.5 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap flex-shrink-0 bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 hover:bg-emerald-100"
+        >
+          <Plus className="w-3 h-3" />
+          <span>Category</span>
+        </button>
       </div>
 
       {/* Products Count Indicator */}
       <div className="flex items-center justify-between text-[11px] text-gray-500 mb-2 px-1">
-        <span>{products.length} {t('products')}</span>
+        <span>
+          Showing {products.length} {products.length === 1 ? 'item' : 'items'}
+          {selectedCategory !== 'All' ? ` under "${selectedCategory}"` : ''}
+        </span>
         {showLowStockOnly && (
           <span className="text-red-600 font-bold">Showing Low Stock Only</span>
         )}
@@ -156,10 +275,23 @@ export default function ProductsPage() {
           <div className="w-8 h-8 rounded-full border-3 border-kiryana-freshGreen border-t-transparent animate-spin"></div>
         </div>
       ) : products.length === 0 ? (
-        <div className="bg-white rounded-2xl p-8 text-center border border-gray-100 shadow-card-soft">
-          <Package className="w-12 h-12 mx-auto text-gray-300 mb-2" />
-          <p className="text-xs font-semibold text-gray-600">No products found</p>
-          <p className="text-[11px] text-gray-400 mt-1">Tap Add Product or Scan Invoice to add items</p>
+        <div className="bg-white rounded-2xl p-8 text-center border border-gray-100 shadow-card-soft space-y-2">
+          <Package className="w-12 h-12 mx-auto text-gray-300" />
+          <p className="text-xs font-semibold text-gray-700">No products found</p>
+          <p className="text-[11px] text-gray-400">
+            {selectedCategory !== 'All'
+              ? `No items added under "${selectedCategory}" yet.`
+              : 'Add your first product or scan an invoice.'}
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/dashboard/products/add"
+              className="inline-flex items-center gap-1.5 bg-kiryana-freshGreen text-white font-bold text-xs px-4 py-2 rounded-xl shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Product</span>
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="space-y-2.5">
@@ -170,109 +302,89 @@ export default function ProductsPage() {
             return (
               <div
                 key={prod._id}
-                className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-card-soft transition-all hover:border-gray-200"
+                className="bg-white rounded-2xl p-3 border border-gray-100 shadow-card-soft flex items-center justify-between gap-3 hover:border-gray-200 transition-colors"
               >
-                <div className="flex items-start gap-3">
-                  {/* Product Online Image Thumbnail */}
-                  <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 border border-gray-200 shadow-inner">
-                    <img
-                      src={prod.productImage || getProductImage(prod.name, prod.category)}
-                      alt={prod.name}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80';
-                      }}
-                    />
+                {/* Product Image Thumbnail */}
+                <div className="w-12 h-12 rounded-xl overflow-hidden bg-kiryana-softBg flex-shrink-0 border border-gray-100 flex items-center justify-center">
+                  <img
+                    src={prod.productImage || getProductImage(prod.name)}
+                    alt={prod.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80';
+                    }}
+                  />
+                </div>
+
+                {/* Details */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-gray-900 truncate block">
+                      {prod.name}
+                    </span>
+                    {prod.nameUrdu && (
+                      <span className="text-[10px] text-gray-500 font-urdu truncate hidden sm:inline">
+                        ({prod.nameUrdu})
+                      </span>
+                    )}
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-1">
-                      <div>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h4 className="text-sm font-bold text-gray-900 leading-snug">
-                            {prod.name}
-                          </h4>
-                          {prod.nameUrdu && (
-                            <span className="text-xs text-emerald-800 font-urdu font-medium">
-                              ({prod.nameUrdu})
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-gray-500 mt-0.5">
-                          {prod.category}
-                        </div>
-                      </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                      {prod.category}
+                    </span>
+                    <span className="text-[10px] text-gray-400">
+                      Cost: Rs. {prod.purchasePrice}
+                    </span>
+                  </div>
 
-                      {/* Stock Status Badge */}
-                      <div className="text-right flex-shrink-0">
-                        <div
-                          className={`text-xs font-black px-2 py-0.5 rounded-lg inline-block ${
-                            isOut
-                              ? 'bg-rose-100 text-rose-800'
-                              : isLow
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-emerald-100 text-emerald-800'
-                          }`}
-                        >
-                          {prod.currentStock} {prod.unit}
-                        </div>
-                        <span className="text-[9px] text-gray-400 mt-0.5 font-medium block">
-                          {isOut ? t('outOfStock') : isLow ? t('lowStock') : t('inStock')}
-                        </span>
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs font-extrabold text-kiryana-darkGreen font-mono">
+                      Rs. {prod.sellingPrice}
+                      <span className="text-[10px] text-gray-500 font-normal"> / {prod.unit}</span>
+                    </span>
 
-                    {/* Pricing & Stock Details */}
-                    <div className="flex items-center gap-4 mt-2 text-xs">
-                      <div>
-                        <span className="text-[10px] text-gray-400 block">Sell Rate</span>
-                        <span className="font-bold text-kiryana-darkGreen">
-                          Rs. {prod.sellingPrice} <span className="text-[10px] font-normal text-gray-500">/ {prod.unit}</span>
-                        </span>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] text-gray-400 block">Cost Rate</span>
-                        <span className="font-medium text-gray-600">
-                          Rs. {prod.purchasePrice}
-                        </span>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] text-gray-400 block">Variations</span>
-                        <span className="font-semibold text-gray-700 flex items-center gap-0.5">
-                          <Layers className="w-3 h-3 text-gray-400" />
-                          {prod.variations?.length || 1}
-                        </span>
-                      </div>
-                    </div>
+                    {prod.variations && prod.variations.length > 1 && (
+                      <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-semibold flex items-center gap-0.5">
+                        <Layers className="w-2.5 h-2.5" />
+                        {prod.variations.length} packs
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {/* Actions Row */}
-                <div className="flex items-center justify-end gap-1 mt-3 pt-2 border-t border-gray-100">
-                  <Link
-                    href={`/dashboard/products/${prod._id}`}
-                    className="p-1.5 rounded-lg text-gray-500 hover:text-kiryana-freshGreen hover:bg-kiryana-lightGreen/50 transition-colors"
-                    title={t('view')}
+                {/* Stock Status & Actions */}
+                <div className="flex flex-col items-end gap-1.5">
+                  <div
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      isOut
+                        ? 'bg-red-100 text-red-700'
+                        : isLow
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}
                   >
-                    <Eye className="w-4 h-4" />
-                  </Link>
-                  <Link
-                    href={`/dashboard/products/${prod._id}?edit=true`}
-                    className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                    title={t('edit')}
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </Link>
-                  <button
-                    onClick={() => handleDelete(prod._id, prod.name)}
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                    title={t('delete')}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    {prod.currentStock} {prod.unit}
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <Link
+                      href={`/dashboard/products/${prod._id}?edit=true`}
+                      className="p-1.5 text-gray-400 hover:text-kiryana-freshGreen hover:bg-gray-50 rounded-lg transition-colors"
+                      title={t('edit')}
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </Link>
+
+                    <button
+                      onClick={() => handleDelete(prod._id, prod.name)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-50 rounded-lg transition-colors"
+                      title={t('delete')}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
