@@ -3,34 +3,10 @@
   "services": {
     "client": {
       "root": "client",
-      "framework": "nextjs",
-      "bindings": [
-        {
-          "type": "service",
-          "service": "server",
-          "format": "url",
-          "env": "SERVER_URL"
-        }
-      ]
-    },
-    "server": {
-      "root": "server",
-      "framework": "express"
+      "framework": "nextjs"
     }
   },
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": {
-        "service": "server"
-      }
-    },
-    {
-      "source": "/uploads/(.*)",
-      "destination": {
-        "service": "server"
-      }
-    },
     {
       "source": "/(.*)",
       "destination": {

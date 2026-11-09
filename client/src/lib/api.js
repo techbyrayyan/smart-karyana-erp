@@ -1,8 +1,4 @@
-// When executed on the server (SSR / Route handlers), use the bound SERVER_URL if available;
-// in the browser, call the relative /api path which Vercel rewrites to the server service.
-const API_BASE = typeof window === 'undefined' && process.env.SERVER_URL
-  ? `${process.env.SERVER_URL}/api`
-  : '/api';
+const API_BASE = '/api';
 
 /**
  * Universal API fetch wrapper with JWT authentication
