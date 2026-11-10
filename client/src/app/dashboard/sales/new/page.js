@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import MobileAppShell from '../../../../components/layout/MobileAppShell';
 import { useLanguage } from '../../../../context/LanguageContext';
 import { useAuth } from '../../../../context/AuthContext';
-import { productApi, customerApi, saleApi, categoryApi } from '../../../../lib/api';
+import { productApi, customerApi, saleApi, categoryApi, aiInvoiceApi } from '../../../../lib/api';
 import ThermalReceipt from '../../../../components/receipt/ThermalReceipt';
 import { getProductImage } from '../../../../lib/productImages';
 import { calculateLinePrice, WEIGHT_PRESETS, getProductUnitType } from '../../../../lib/pricingCalculator';
@@ -26,6 +26,11 @@ import {
   Package,
   Scale,
   Calculator,
+  Camera,
+  Upload,
+  Sparkles,
+  Check,
+  Loader2,
 } from 'lucide-react';
 
 export default function NewSalePage() {
@@ -122,6 +127,140 @@ export default function NewSalePage() {
   const [paidAmount, setPaidAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash' | 'online' | 'credit_khata'
   const [notes, setNotes] = useState('');
+
+  // Receipt Scanning States
+  const [receiptMode, setReceiptMode] = useState(false); // Toggle receipt scan UI
+  const [receiptImages, setReceiptImages] = useState([]);
+  const [receiptScanning, setReceiptScanning] = useState(false);
+  const [receiptScannedItems, setReceiptScannedItems] = useState([]); // AI-extracted items
+  const [receiptError, setReceiptError] = useState('');
+  const receiptFileRef = React.useRef(null);
+  const receiptCameraRef = React.useRef(null);
+
+  // Handle receipt image selection (camera or gallery)
+  const handleReceiptImageSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const newImages = files.map((f) => ({
+      file: f,
+      preview: URL.createObjectURL(f),
+    }));
+    setReceiptImages((prev) => [...prev, ...newImages]);
+    setReceiptError('');
+    setReceiptScannedItems([]);
+  };
+
+  // Clear receipt images
+  const clearReceiptImages = () => {
+    receiptImages.forEach((img) => URL.revokeObjectURL(img.preview));
+    setReceiptImages([]);
+    setReceiptScannedItems([]);
+    setReceiptError('');
+  };
+
+  // Scan receipt with AI
+  const handleScanReceipt = async () => {
+    if (receiptImages.length === 0) return;
+    setReceiptScanning(true);
+    setReceiptError('');
+    setReceiptScannedItems([]);
+
+    try {
+      const formData = new FormData();
+      receiptImages.forEach((img) => {
+        formData.append('invoiceImages', img.file);
+      });
+
+      const res = await aiInvoiceApi.scanInvoice(formData);
+      if (res.success && res.data && res.data.items) {
+        const items = res.data.items.map((item, idx) => ({
+          ...item,
+          _selected: true, // Default all selected
+          _editingPrice: false,
+        }));
+        setReceiptScannedItems(items);
+      } else {
+        setReceiptError(res.message || 'Failed to scan receipt');
+      }
+    } catch (err) {
+      setReceiptError(err.message || 'AI scanning failed. Try again with a clearer image.');
+    } finally {
+      setReceiptScanning(false);
+    }
+  };
+
+  // Add scanned items to cart
+  const handleAddScannedItemsToCart = () => {
+    const selectedItems = receiptScannedItems.filter((item) => item._selected);
+    if (selectedItems.length === 0) return;
+
+    const newCartItems = selectedItems.map((item) => {
+      const unitPrice = Number(item.unitPrice) || Number(item.rateListPrice) || 0;
+      const quantity = Number(item.quantity) || 1;
+      const unit = item.unit || 'KG';
+      const unitType = ['kg', 'gram', 'liter', 'ml'].some((u) => unit.toLowerCase().includes(u)) ? 'weight' : 'piece';
+
+      let lineTotal = Number(item.lineTotal) || 0;
+      if (lineTotal <= 0) {
+        if (unitType === 'weight') {
+          // Convert unit to grams for calculation
+          let grams = quantity;
+          if (unit.toLowerCase().includes('kg')) grams = quantity * 1000;
+          lineTotal = Math.round(((grams / 1000) * unitPrice + Number.EPSILON) * 100) / 100;
+        } else {
+          lineTotal = Math.round((quantity * unitPrice + Number.EPSILON) * 100) / 100;
+        }
+      }
+
+      const displayName = unitType === 'weight'
+        ? (unit.toLowerCase().includes('gram') ? `${quantity} Gram` : `${quantity} ${unit}`)
+        : `${quantity} ${unit}`;
+
+      return {
+        product: item.matchedProductId || null,
+        productId: item.matchedDisplayId || null,
+        productName: item.matchedProductName || item.productName || 'Unknown Item',
+        variationName: displayName,
+        quantity: unitType === 'weight' && unit.toLowerCase().includes('gram') ? quantity / 1000 : quantity,
+        grams: unitType === 'weight' ? (unit.toLowerCase().includes('gram') ? quantity : quantity * 1000) : undefined,
+        unit: unitType === 'weight' ? 'KG' : unit,
+        multiplier: 1,
+        unitPrice,
+        lineTotal,
+        isFromReceipt: true,
+      };
+    });
+
+    setCart((prev) => [...prev, ...newCartItems]);
+    // Clear receipt scanning state
+    setReceiptScannedItems([]);
+    clearReceiptImages();
+    setReceiptMode(false);
+  };
+
+  // Toggle item selection in scanned list
+  const toggleScannedItemSelection = (idx) => {
+    setReceiptScannedItems((prev) => {
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], _selected: !copy[idx]._selected };
+      return copy;
+    });
+  };
+
+  // Update scanned item price manually
+  const updateScannedItemPrice = (idx, newPrice) => {
+    setReceiptScannedItems((prev) => {
+      const copy = [...prev];
+      const price = Number(newPrice) || 0;
+      const quantity = Number(copy[idx].quantity) || 1;
+      copy[idx] = {
+        ...copy[idx],
+        unitPrice: price,
+        lineTotal: Math.round((quantity * price + Number.EPSILON) * 100) / 100,
+      };
+      return copy;
+    });
+  };
 
   // UI Flow States
   const [submitting, setSubmitting] = useState(false);
@@ -371,6 +510,321 @@ export default function NewSalePage() {
           </div>
 
           {/* Dynamic Category Selector Bar (Pehle Category Select Karein: e.g. Rice, Atta) */}
+          {/* === RECEIPT SCAN / MANUAL TOGGLE === */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { setReceiptMode(false); setReceiptError(''); }}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                !receiptMode
+                  ? 'bg-kiryana-darkGreen text-white shadow-sm'
+                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <ShoppingCart className="w-3.5 h-3.5" />
+              <span>Manual Sale</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReceiptMode(true)}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                receiptMode
+                  ? 'bg-kiryana-darkGreen text-white shadow-sm'
+                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>📷 Scan Parchi</span>
+            </button>
+          </div>
+
+          {/* === RECEIPT SCAN MODE === */}
+          {receiptMode && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-card-soft p-3.5 space-y-3">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-kiryana-darkGreen to-emerald-800 text-white p-3 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-emerald-200" />
+                  <div>
+                    <h3 className="text-xs font-bold">AI Receipt / Parchi Scanner</h3>
+                    <p className="text-[10px] text-emerald-200">Customer ki parchi ki photo lo, AI items nikaal ke prices lagayega</p>
+                  </div>
+                </div>
+              </div>
+
+              {receiptError && (
+                <div className="p-2.5 bg-red-50 border border-red-200 text-red-700 text-[11px] rounded-xl flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>{receiptError}</span>
+                  <button type="button" onClick={() => setReceiptError('')} className="ml-auto">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Upload Buttons */}
+              {receiptScannedItems.length === 0 && (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => receiptCameraRef.current?.click()}
+                      className="p-4 bg-kiryana-softBg hover:bg-emerald-50 border border-gray-200 hover:border-emerald-300 rounded-xl flex flex-col items-center gap-2 transition-all"
+                    >
+                      <Camera className="w-7 h-7 text-kiryana-darkGreen" />
+                      <span className="text-[11px] font-bold text-gray-800">Take Photo</span>
+                      <span className="text-[9px] text-gray-500">Camera se parchi ki photo</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => receiptFileRef.current?.click()}
+                      className="p-4 bg-kiryana-softBg hover:bg-emerald-50 border border-gray-200 hover:border-emerald-300 rounded-xl flex flex-col items-center gap-2 transition-all"
+                    >
+                      <Upload className="w-7 h-7 text-kiryana-darkGreen" />
+                      <span className="text-[11px] font-bold text-gray-800">Upload Photo</span>
+                      <span className="text-[9px] text-gray-500">Gallery se image upload</span>
+                    </button>
+                  </div>
+
+                  {/* Hidden file inputs */}
+                  <input
+                    ref={receiptCameraRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleReceiptImageSelect}
+                    className="hidden"
+                  />
+                  <input
+                    ref={receiptFileRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleReceiptImageSelect}
+                    className="hidden"
+                  />
+
+                  {/* Preview Selected Images */}
+                  {receiptImages.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-gray-700">
+                          Selected Parchi ({receiptImages.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={clearReceiptImages}
+                          className="text-[10px] text-red-500 font-bold"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {receiptImages.map((img, idx) => (
+                          <div key={idx} className="relative flex-shrink-0">
+                            <img
+                              src={img.preview}
+                              alt={`Receipt ${idx + 1}`}
+                              className="w-20 h-20 object-cover rounded-lg border-2 border-emerald-200"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                URL.revokeObjectURL(img.preview);
+                                setReceiptImages((prev) => prev.filter((_, i) => i !== idx));
+                              }}
+                              className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px]"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Scan Button */}
+                      <button
+                        type="button"
+                        onClick={handleScanReceipt}
+                        disabled={receiptScanning}
+                        className="w-full py-3 bg-gradient-to-r from-kiryana-freshGreen to-emerald-600 hover:from-kiryana-darkGreen hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all active:scale-98 disabled:opacity-50"
+                      >
+                        {receiptScanning ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>AI Reading Parchi... Please Wait</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4" />
+                            <span>🔍 Scan with AI & Extract Items</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* === SCANNED ITEMS REVIEW TABLE === */}
+              {receiptScannedItems.length > 0 && (
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                    <h4 className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      <span>Extracted Items ({receiptScannedItems.length})</span>
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => { setReceiptScannedItems([]); setReceiptImages([]); }}
+                      className="text-[10px] text-red-500 font-bold"
+                    >
+                      Re-scan
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {receiptScannedItems.map((item, idx) => {
+                      const hasMatch = item.isMatch && item.matchedProductName;
+                      const price = Number(item.unitPrice) || Number(item.rateListPrice) || 0;
+                      const quantity = Number(item.quantity) || 1;
+                      const total = Number(item.lineTotal) || Math.round((quantity * price + Number.EPSILON) * 100) / 100;
+
+                      return (
+                        <div
+                          key={item.tempId || idx}
+                          className={`p-2.5 rounded-xl border transition-all ${
+                            item._selected
+                              ? hasMatch
+                                ? 'bg-emerald-50 border-emerald-200'
+                                : 'bg-amber-50 border-amber-200'
+                              : 'bg-gray-50 border-gray-200 opacity-60'
+                          }`}
+                        >
+                          <div className="flex items-start gap-2">
+                            {/* Selection checkbox */}
+                            <button
+                              type="button"
+                              onClick={() => toggleScannedItemSelection(idx)}
+                              className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                item._selected
+                                  ? 'bg-kiryana-freshGreen border-kiryana-darkGreen text-white'
+                                  : 'bg-white border-gray-300'
+                              }`}
+                            >
+                              {item._selected && <Check className="w-3 h-3" />}
+                            </button>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-gray-900 truncate">
+                                  {item.productName}
+                                </span>
+                                {hasMatch && (
+                                  <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold flex-shrink-0 ml-1">
+                                    ✓ Matched
+                                  </span>
+                                )}
+                                {!hasMatch && (
+                                  <span className="text-[8px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold flex-shrink-0 ml-1">
+                                    ⚠ Unmatched
+                                  </span>
+                                )}
+                              </div>
+
+                              {hasMatch && item.matchedProductName !== item.productName && (
+                                <span className="text-[10px] text-emerald-600 block truncate">
+                                  → {item.matchedProductName}
+                                </span>
+                              )}
+
+                              <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-600">
+                                <span className="font-bold">Qty: {quantity} {item.unit || ''}</span>
+                                <span>×</span>
+                                <span className="font-bold text-kiryana-darkGreen">
+                                  Rs. {price > 0 ? price : '—'}
+                                </span>
+                                {item.isRateListPriceApplied && (
+                                  <span className="text-[8px] bg-blue-50 text-blue-600 px-1 py-0.5 rounded font-bold">
+                                    Rate List
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Editable price for unmatched / zero price items */}
+                              {price <= 0 && (
+                                <div className="flex items-center gap-2 mt-1.5">
+                                  <span className="text-[10px] text-amber-700 font-bold">Price:</span>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    placeholder="Enter price"
+                                    className="w-24 px-2 py-1 text-[11px] border border-amber-300 rounded-lg font-mono font-bold bg-white"
+                                    onChange={(e) => updateScannedItemPrice(idx, e.target.value)}
+                                  />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Line Total */}
+                            <div className="text-right flex-shrink-0">
+                              <span className="text-xs font-black font-mono text-kiryana-darkGreen">
+                                Rs. {total > 0 ? total.toFixed(2) : '0.00'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Summary Bar */}
+                  <div className="bg-kiryana-softBg border border-emerald-200 p-3 rounded-xl">
+                    <div className="flex items-center justify-between text-xs">
+                      <div>
+                        <span className="text-gray-600">Selected: </span>
+                        <span className="font-bold text-gray-900">
+                          {receiptScannedItems.filter((i) => i._selected).length} / {receiptScannedItems.length} items
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Total: </span>
+                        <span className="font-black font-mono text-kiryana-darkGreen text-sm">
+                          Rs.{' '}
+                          {receiptScannedItems
+                            .filter((i) => i._selected)
+                            .reduce((sum, i) => sum + (Number(i.lineTotal) || 0), 0)
+                            .toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                    {receiptScannedItems.some((i) => !i.isMatch && i._selected) && (
+                      <p className="text-[10px] text-amber-700 mt-1">
+                        ⚠ Kuch items database mein match nahi hue. Unki price manually set karen ya unselect karen.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Add to Cart Button */}
+                  <button
+                    type="button"
+                    onClick={handleAddScannedItemsToCart}
+                    disabled={receiptScannedItems.filter((i) => i._selected).length === 0}
+                    className="w-full py-3 bg-kiryana-freshGreen hover:bg-kiryana-darkGreen text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all active:scale-98 disabled:opacity-50"
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                    <span>
+                      ✅ Add {receiptScannedItems.filter((i) => i._selected).length} Items to Cart
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* === MANUAL SALE MODE: Category + Products === */}
+          {!receiptMode && (
+            <>
+          {/* Dynamic Category Selector */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between px-1">
               <span className="text-[11px] font-bold text-gray-700">1. Select Category (کیٹیگری چنیں)</span>
@@ -507,6 +961,8 @@ export default function NewSalePage() {
               </div>
             )}
           </div>
+          </>
+          )}
 
           {/* Cart Table / Items */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-card-soft p-3.5 space-y-3">
