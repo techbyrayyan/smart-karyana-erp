@@ -48,25 +48,32 @@ export async function GET(request) {
     }
 
     const now = new Date();
+    let dateRange = null;
     if (filter === 'today') {
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-      query.saleDate = { $gte: startOfDay, $lte: endOfDay };
+      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      dateRange = { $gte: startOfDay, $lte: endOfDay };
     } else if (filter === 'yesterday') {
       const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
-      const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
-      query.saleDate = { $gte: startOfYesterday, $lte: endOfYesterday };
+      const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+      dateRange = { $gte: startOfYesterday, $lte: endOfYesterday };
     } else if (filter === 'this_week') {
       const startOfWeek = new Date(now);
       startOfWeek.setDate(now.getDate() - now.getDay());
       startOfWeek.setHours(0, 0, 0, 0);
-      query.saleDate = { $gte: startOfWeek };
+      dateRange = { $gte: startOfWeek };
     } else if (filter === 'this_month') {
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      query.saleDate = { $gte: startOfMonth };
+      dateRange = { $gte: startOfMonth };
     }
 
-    const sales = await Sale.find(query).sort({ saleDate: -1 }).limit(100).lean();
+    if (dateRange) {
+      query.$or = query.$or
+        ? [{ $and: [{ $or: [{ saleDate: dateRange }, { date: dateRange }, { createdAt: dateRange }] }, { $or: query.$or }] }]
+        : [{ saleDate: dateRange }, { date: dateRange }, { createdAt: dateRange }];
+    }
+
+    const sales = await Sale.find(query).sort({ createdAt: -1, date: -1 }).limit(100).lean();
     return NextResponse.json({ success: true, count: sales.length, sales });
   } catch (error) {
     console.error('Sales GET error:', error);
@@ -154,6 +161,7 @@ export async function POST(request) {
       paymentMethod,
       paymentStatus,
       notes,
+      date: new Date(),
       saleDate: new Date(),
     });
 

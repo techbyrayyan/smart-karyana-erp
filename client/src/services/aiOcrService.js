@@ -129,6 +129,7 @@ async function callGeminiVision(promptText, imageFiles) {
     generationConfig: {
       response_mime_type: 'application/json',
       temperature: 0.1,
+      maxOutputTokens: 2500,
     },
   };
 

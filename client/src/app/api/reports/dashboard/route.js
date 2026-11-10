@@ -36,21 +36,44 @@ export async function GET(request) {
       Product.countDocuments({ isArchived: false, $expr: { $lte: ['$currentStock', '$minStockAlert'] } }),
       Customer.countDocuments({ isArchived: false }),
       Sale.aggregate([
-        { $match: { saleDate: { $gte: todayStart, $lte: todayEnd }, status: { $ne: 'void' } } },
+        {
+          $match: {
+            status: { $nin: ['void', 'voided'] },
+            $or: [
+              { saleDate: { $gte: todayStart, $lte: todayEnd } },
+              { date: { $gte: todayStart, $lte: todayEnd } },
+              { createdAt: { $gte: todayStart, $lte: todayEnd } },
+            ],
+          },
+        },
         { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
       ]),
       Purchase.aggregate([
-        { $match: { purchaseDate: { $gte: todayStart, $lte: todayEnd } } },
+        {
+          $match: {
+            $or: [
+              { purchaseDate: { $gte: todayStart, $lte: todayEnd } },
+              { createdAt: { $gte: todayStart, $lte: todayEnd } },
+            ],
+          },
+        },
         { $group: { _id: null, total: { $sum: '$total' }, count: { $sum: 1 } } },
       ]),
       Expense.aggregate([
-        { $match: { date: { $gte: todayStart, $lte: todayEnd } } },
+        {
+          $match: {
+            $or: [
+              { date: { $gte: todayStart, $lte: todayEnd } },
+              { createdAt: { $gte: todayStart, $lte: todayEnd } },
+            ],
+          },
+        },
         { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
       ]),
-      Sale.find({ status: { $ne: 'void' } })
-        .sort({ saleDate: -1 })
+      Sale.find({ status: { $nin: ['void', 'voided'] } })
+        .sort({ createdAt: -1, date: -1 })
         .limit(8)
-        .select('receiptNumber customerName grandTotal paymentStatus saleDate')
+        .select('receiptNumber customerName grandTotal paymentStatus saleDate date createdAt')
         .lean(),
       Purchase.find({})
         .sort({ purchaseDate: -1 })

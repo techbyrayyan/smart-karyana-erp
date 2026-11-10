@@ -113,6 +113,10 @@ const saleSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    saleDate: {
+      type: Date,
+      default: Date.now,
+    },
     status: {
       type: String,
       enum: ['completed', 'voided', 'edited'],

@@ -66,6 +66,26 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchDashboardData();
+
+    // Auto-refresh when tab becomes visible or receives focus
+    const handleSync = () => {
+      if (document.visibilityState === 'visible') {
+        fetchDashboardData();
+      }
+    };
+    window.addEventListener('visibilitychange', handleSync);
+    window.addEventListener('focus', handleSync);
+
+    // Live update polling every 10 seconds
+    const interval = setInterval(() => {
+      fetchDashboardData();
+    }, 10000);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleSync);
+      window.removeEventListener('focus', handleSync);
+      clearInterval(interval);
+    };
   }, []);
 
   return (
