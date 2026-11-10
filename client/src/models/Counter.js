@@ -11,16 +11,15 @@ const counterSchema = new mongoose.Schema({
   },
 });
 
-const Counter = mongoose.models.Counter || mongoose.model('Counter', counterSchema);
-
 /**
  * Atomically increments and returns the next sequential number.
  * Guarantees thread-safe, gap-free, non-colliding sequential IDs even under concurrency.
  * @param {string} sequenceName - Identifier for sequence (e.g. 'productId')
  * @returns {Promise<number>} - Next unique sequential integer
  */
-export async function getNextSequenceValue(sequenceName = 'productId') {
-  const result = await Counter.findByIdAndUpdate(
+async function getNextSequenceValue(sequenceName = 'productId') {
+  const model = mongoose.models.Counter || mongoose.model('Counter', counterSchema);
+  const result = await model.findByIdAndUpdate(
     sequenceName,
     { $inc: { seq: 1 } },
     { new: true, upsert: true }
@@ -28,4 +27,10 @@ export async function getNextSequenceValue(sequenceName = 'productId') {
   return result.seq;
 }
 
+counterSchema.statics.getNextSequenceValue = getNextSequenceValue;
+
+const Counter = mongoose.models.Counter || mongoose.model('Counter', counterSchema);
+Counter.getNextSequenceValue = getNextSequenceValue;
+
+export { getNextSequenceValue };
 export default Counter;

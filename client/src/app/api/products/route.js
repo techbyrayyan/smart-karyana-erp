@@ -5,7 +5,7 @@ import { verifyAuth } from '../../../lib/authHelper';
 import Product from '../../../models/Product';
 import StockMovement from '../../../models/StockMovement';
 import Category from '../../../models/Category';
-import Counter from '../../../models/Counter';
+import Counter, { getNextSequenceValue } from '../../../models/Counter';
 
 export async function GET(request) {
   try {
@@ -83,7 +83,7 @@ export async function POST(request) {
     }
 
     // Assign atomic sequential Product ID
-    const nextProductId = await Counter.getNextSequenceValue('productId');
+    const nextProductId = await getNextSequenceValue('productId');
     const cleanSellPrice = Number(sellingPrice) || 0;
     const cleanUnit = unit || 'KG';
     const inferredUnitType = ['kg', 'gram', 'liter'].some(u => cleanUnit.toLowerCase().includes(u)) ? 'weight' : 'piece';

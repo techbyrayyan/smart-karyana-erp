@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import connectDB from '../../../../lib/db';
 import { verifyAuth } from '../../../../lib/authHelper';
 import Product from '../../../../models/Product';
-import Counter from '../../../../models/Counter';
+import Counter, { getNextSequenceValue } from '../../../../models/Counter';
 import RateListUpload from '../../../../models/RateListUpload';
 
 /**
@@ -33,7 +33,7 @@ export async function POST(request) {
       );
     }
 
-    const uploadNumber = await Counter.getNextSequenceValue('rateListUpload');
+    const uploadNumber = await getNextSequenceValue('rateListUpload');
 
     let updatedCount = 0;
     let newCount = 0;
@@ -67,7 +67,7 @@ export async function POST(request) {
       if (existingProd) {
         // Ensure existing product has a permanent productId if it was created before counter system
         if (!existingProd.productId) {
-          existingProd.productId = await Counter.getNextSequenceValue('productId');
+          existingProd.productId = await getNextSequenceValue('productId');
         }
 
         const oldPrice = existingProd.pricePerUnit || existingProd.salePrice || 0;
@@ -123,7 +123,7 @@ export async function POST(request) {
         }
       } else {
         // New Product: assign next atomic sequential Product ID
-        const nextId = await Counter.getNextSequenceValue('productId');
+        const nextId = await getNextSequenceValue('productId');
 
         const newProd = await Product.create({
           productId: nextId,

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import connectDB from '../../../lib/db';
 import { verifyAuth } from '../../../lib/authHelper';
 import Product from '../../../models/Product';
-import Counter from '../../../models/Counter';
+import Counter, { getNextSequenceValue } from '../../../models/Counter';
 
 /**
  * GET /api/ratelist
@@ -168,7 +168,7 @@ export async function POST(request) {
     const inferredUnitType = unitType || (['kg', 'gram', 'liter'].some(u => (unit || '').toLowerCase().includes(u)) ? 'weight' : 'piece');
 
     // Get atomic sequential Product ID
-    const nextId = await Counter.getNextSequenceValue('productId');
+    const nextId = await getNextSequenceValue('productId');
 
     const product = await Product.create({
       productId: nextId,
