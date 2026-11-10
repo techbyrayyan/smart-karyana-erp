@@ -4,7 +4,15 @@ const priceHistorySchema = new mongoose.Schema(
   {
     price: {
       type: Number,
-      required: true,
+      default: 0,
+    },
+    newPrice: {
+      type: Number,
+      default: 0,
+    },
+    previousPrice: {
+      type: Number,
+      default: 0,
     },
     purchasePrice: {
       type: Number,
@@ -23,6 +31,10 @@ const priceHistorySchema = new mongoose.Schema(
       default: 'rate_list_update',
     },
     notes: {
+      type: String,
+      default: '',
+    },
+    note: {
       type: String,
       default: '',
     },

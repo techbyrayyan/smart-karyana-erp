@@ -105,6 +105,7 @@ export async function POST(request) {
       lastRateListUpdate: new Date(),
       priceHistory: [
         {
+          price: cleanSellPrice,
           previousPrice: 0,
           newPrice: cleanSellPrice,
           changedAt: new Date(),

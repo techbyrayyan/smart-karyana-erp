@@ -117,6 +117,7 @@ export async function PUT(request) {
     if (newPrice !== previousPrice) {
       product.priceHistory = product.priceHistory || [];
       product.priceHistory.push({
+        price: newPrice,
         previousPrice,
         newPrice,
         changedAt: new Date(),
@@ -185,6 +186,7 @@ export async function POST(request) {
       lastRateListUpdate: new Date(),
       priceHistory: [
         {
+          price: cleanPrice,
           previousPrice: 0,
           newPrice: cleanPrice,
           changedAt: new Date(),
