@@ -95,13 +95,16 @@ export async function POST(request) {
 
           itemSnapshots.push({
             productId: existingProd.productId,
+            productName: existingProd.name,
             name: existingProd.name,
+            productNameUrdu: existingProd.nameUrdu,
             nameUrdu: existingProd.nameUrdu,
             variant: existingProd.variant,
             unitType: existingProd.unitType,
             unit: existingProd.unit,
             oldPrice,
             newPrice: cleanPrice,
+            status: 'updated',
             action: 'updated',
           });
         } else {
@@ -112,13 +115,16 @@ export async function POST(request) {
 
           itemSnapshots.push({
             productId: existingProd.productId,
+            productName: existingProd.name,
             name: existingProd.name,
+            productNameUrdu: existingProd.nameUrdu,
             nameUrdu: existingProd.nameUrdu,
             variant: existingProd.variant,
             unitType: existingProd.unitType,
             unit: existingProd.unit,
             oldPrice,
             newPrice: oldPrice,
+            status: 'unchanged',
             action: 'unchanged',
           });
         }
@@ -156,13 +162,16 @@ export async function POST(request) {
 
         itemSnapshots.push({
           productId: nextId,
+          productName: newProd.name,
           name: newProd.name,
+          productNameUrdu: newProd.nameUrdu,
           nameUrdu: newProd.nameUrdu,
           variant: newProd.variant,
           unitType: newProd.unitType,
           unit: newProd.unit,
           oldPrice: 0,
           newPrice: cleanPrice,
+          status: 'new',
           action: 'created',
         });
       }

@@ -7,9 +7,17 @@ const rateListUploadItemSchema = new mongoose.Schema(
     },
     productName: {
       type: String,
-      required: true,
+      default: '',
+    },
+    name: {
+      type: String,
+      default: '',
     },
     productNameUrdu: {
+      type: String,
+      default: '',
+    },
+    nameUrdu: {
       type: String,
       default: '',
     },
@@ -23,7 +31,6 @@ const rateListUploadItemSchema = new mongoose.Schema(
     },
     unitType: {
       type: String,
-      enum: ['weight', 'piece'],
       default: 'weight',
     },
     oldPrice: {
@@ -32,12 +39,15 @@ const rateListUploadItemSchema = new mongoose.Schema(
     },
     newPrice: {
       type: Number,
-      required: true,
+      default: 0,
     },
     status: {
       type: String,
-      enum: ['updated', 'new', 'unchanged', 'unmatched'],
       default: 'new',
+    },
+    action: {
+      type: String,
+      default: 'created',
     },
     confidence: {
       type: Number,
@@ -50,57 +60,51 @@ const rateListUploadItemSchema = new mongoose.Schema(
 const rateListUploadSchema = new mongoose.Schema(
   {
     uploadNumber: {
-      type: String,
-      required: true,
+      type: Number,
       unique: true,
+      index: true,
     },
-    uploadDate: {
-      type: Date,
-      default: Date.now,
+    uploadedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
     },
-    rawImageUrl: {
+    source: {
       type: String,
-      default: '',
+      default: 'ai_scan',
     },
-    totalExtracted: {
-      type: Number,
-      default: 0,
-    },
-    totalUpdated: {
-      type: Number,
-      default: 0,
-    },
-    totalNew: {
-      type: Number,
-      default: 0,
-    },
-    unmatchedCount: {
-      type: Number,
-      default: 0,
-    },
-    status: {
+    title: {
       type: String,
-      enum: ['confirmed', 'pending_review', 'cancelled'],
-      default: 'confirmed',
+      default: 'Rate List Update',
     },
-    items: [rateListUploadItemSchema],
     notes: {
       type: String,
       default: '',
     },
-    uploadedBy: {
-      type: String,
-      default: 'admin',
+    itemsCount: {
+      type: Number,
+      default: 0,
     },
+    newProductsCount: {
+      type: Number,
+      default: 0,
+    },
+    updatedPricesCount: {
+      type: Number,
+      default: 0,
+    },
+    unchangedPricesCount: {
+      type: Number,
+      default: 0,
+    },
+    items: [rateListUploadItemSchema],
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-rateListUploadSchema.index({ uploadNumber: 1 });
-rateListUploadSchema.index({ uploadDate: -1 });
-
 const RateListUpload =
-  mongoose.models.RateListUpload ||
-  mongoose.model('RateListUpload', rateListUploadSchema);
+  mongoose.models.RateListUpload || mongoose.model('RateListUpload', rateListUploadSchema);
 
 module.exports = RateListUpload;
