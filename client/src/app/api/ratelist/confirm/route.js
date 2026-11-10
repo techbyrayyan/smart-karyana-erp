@@ -84,8 +84,22 @@ export async function POST(request) {
             note: `Updated via Rate List Upload #${uploadNumber}`,
           });
 
+          existingProd.sellingPrice = cleanPrice;
           existingProd.salePrice = cleanPrice;
           existingProd.pricePerUnit = cleanPrice;
+          if (existingProd.variations && existingProd.variations.length > 0) {
+            existingProd.variations[0].price = cleanPrice;
+          } else {
+            existingProd.variations = [
+              {
+                name: `1 ${existingProd.unit || 'KG'}`,
+                unit: existingProd.unit || 'KG',
+                multiplier: 1,
+                price: cleanPrice,
+                isActive: true,
+              },
+            ];
+          }
           existingProd.lastRateListUpdate = now;
           if (cleanUrdu && !existingProd.nameUrdu) existingProd.nameUrdu = cleanUrdu;
           if (cleanVariant && !existingProd.variant) existingProd.variant = cleanVariant;
@@ -139,6 +153,7 @@ export async function POST(request) {
           variant: cleanVariant,
           unit,
           unitType,
+          sellingPrice: cleanPrice,
           salePrice: cleanPrice,
           pricePerUnit: cleanPrice,
           purchasePrice: 0,
@@ -146,6 +161,15 @@ export async function POST(request) {
           category,
           minStockAlert: 5,
           lastRateListUpdate: now,
+          variations: [
+            {
+              name: `1 ${unit}`,
+              unit,
+              multiplier: 1,
+              price: cleanPrice,
+              isActive: true,
+            },
+          ],
           priceHistory: [
             {
               price: cleanPrice,

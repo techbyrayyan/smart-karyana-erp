@@ -341,7 +341,7 @@ export default function ProductsPage() {
 
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-xs font-extrabold text-kiryana-darkGreen font-mono">
-                      Rs. {prod.sellingPrice}
+                      Rs. {prod.sellingPrice || prod.pricePerUnit || prod.salePrice || 0}
                       <span className="text-[10px] text-gray-500 font-normal"> / {prod.unit}</span>
                     </span>
 

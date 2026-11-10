@@ -156,5 +156,28 @@ productSchema.index({ currentStock: 1, minStockAlert: 1 });
 productSchema.index({ isArchived: 1 });
 productSchema.index({ productId: 1 });
 
+// Ensure sellingPrice, pricePerUnit, and salePrice are always synchronized
+productSchema.pre('save', function (next) {
+  const p = this.sellingPrice || this.pricePerUnit || this.salePrice || 0;
+  if (!this.sellingPrice && p > 0) this.sellingPrice = p;
+  if (!this.pricePerUnit && p > 0) this.pricePerUnit = p;
+  if (!this.salePrice && p > 0) this.salePrice = p;
+
+  if (!this.variations || this.variations.length === 0) {
+    this.variations = [
+      {
+        name: `1 ${this.unit || 'KG'}`,
+        unit: this.unit || 'KG',
+        multiplier: 1,
+        price: p,
+        isActive: true,
+      },
+    ];
+  } else if (p > 0 && (!this.variations[0].price || this.variations[0].price === 0)) {
+    this.variations[0].price = p;
+  }
+  next();
+});
+
 const Product = mongoose.models.Product || mongoose.model('Product', productSchema);
 export default Product;

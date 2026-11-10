@@ -471,7 +471,7 @@ export default function NewSalePage() {
                           name: `1 ${p.unit}`,
                           unit: p.unit,
                           multiplier: 1,
-                          price: p.sellingPrice,
+                          price: p.sellingPrice || p.pricePerUnit || p.salePrice || 0,
                         };
                         addItemToCart(p, defaultVar);
                       }
@@ -495,7 +495,7 @@ export default function NewSalePage() {
                       </span>
                       <div className="flex items-center justify-between mt-0.5">
                         <span className="text-[11px] font-extrabold text-kiryana-darkGreen font-mono">
-                          Rs. {p.sellingPrice}
+                          Rs. {p.sellingPrice || p.pricePerUnit || p.salePrice || 0}
                         </span>
                         <span className="text-[9px] text-gray-500 font-medium">
                           {p.currentStock} {p.unit}

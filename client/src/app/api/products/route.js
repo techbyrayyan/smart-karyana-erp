@@ -35,7 +35,12 @@ export async function GET(request) {
       query.$expr = { $lte: ['$currentStock', '$minStockAlert'] };
     }
 
-    const products = await Product.find(query).sort({ updatedAt: -1 }).lean();
+    const rawProducts = await Product.find(query).sort({ updatedAt: -1 }).lean();
+    // Ensure sellingPrice is always populated (fallback for products created before price-sync fix)
+    const products = rawProducts.map(p => ({
+      ...p,
+      sellingPrice: p.sellingPrice || p.pricePerUnit || p.salePrice || (p.variations?.[0]?.price) || 0,
+    }));
     return NextResponse.json({ success: true, count: products.length, products });
   } catch (error) {
     console.error('Products GET error:', error);
