@@ -39,10 +39,21 @@ export default function DashboardPage() {
       setRefreshing(true);
       const res = await reportApi.getDashboardStats();
       if (res.success) {
-        setStats(res.stats);
-        setStockActivity(res.stockActivity);
-        setRecentSales(res.recentSales || []);
-        setRecentPurchases(res.recentPurchases || []);
+        const s = res.stats || res.dashboard || {};
+        setStats({
+          ...s,
+          todaySales: s.todaySales ?? s.today?.sales ?? 0,
+          todayEstimatedNetProfit: s.todayEstimatedNetProfit ?? s.today?.estimatedProfit ?? 0,
+          todayPurchases: s.todayPurchases ?? s.today?.purchases ?? 0,
+          todayExpenses: s.todayExpenses ?? s.today?.expenses ?? 0,
+          totalProducts: s.totalProducts ?? 0,
+          availableStock: s.availableStock ?? 0,
+          totalCustomers: s.totalCustomers ?? 0,
+          lowStockProducts: s.lowStockProducts ?? 0,
+        });
+        setStockActivity(res.stockActivity || s.stockActivity || null);
+        setRecentSales(res.recentSales || s.recentSales || []);
+        setRecentPurchases(res.recentPurchases || s.recentPurchases || []);
       }
     } catch (err) {
       console.error('Error loading dashboard stats:', err);

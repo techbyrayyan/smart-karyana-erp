@@ -84,26 +84,39 @@ export async function GET(request) {
     const stockSold = todayStockMovements.filter((m) => m.type === 'sale').reduce((sum, m) => sum + Math.abs(m.quantityChange), 0);
     const stockReturned = todayStockMovements.filter((m) => m.type === 'return').reduce((sum, m) => sum + m.quantityChange, 0);
 
+    const statsData = {
+      totalProducts,
+      lowStockProducts,
+      totalCustomers,
+      totalStockValue: stockValueAgg[0]?.totalValue || 0,
+      availableStock: stockValueAgg[0]?.totalStock || 0,
+      todaySales: todaySalesTotal,
+      todaySalesCount,
+      todayPurchases: todayPurchasesTotal,
+      todayExpenses: todayExpensesTotal,
+      todayEstimatedNetProfit: estimatedProfit,
+      today: {
+        sales: todaySalesTotal,
+        salesCount: todaySalesCount,
+        purchases: todayPurchasesTotal,
+        expenses: todayExpensesTotal,
+        estimatedProfit,
+        stockAdded,
+        stockSold,
+        stockReturned,
+      },
+    };
+
     return NextResponse.json({
       success: true,
-      dashboard: {
-        totalProducts,
-        lowStockProducts,
-        totalCustomers,
-        totalStockValue: stockValueAgg[0]?.totalValue || 0,
-        availableStock: stockValueAgg[0]?.totalStock || 0,
-        today: {
-          sales: todaySalesTotal,
-          salesCount: todaySalesCount,
-          purchases: todayPurchasesTotal,
-          expenses: todayExpensesTotal,
-          estimatedProfit,
-          stockAdded,
-          stockSold,
-          stockReturned,
-        },
-        recentSales,
-        recentPurchases,
+      stats: statsData,
+      dashboard: statsData,
+      recentSales,
+      recentPurchases,
+      stockActivity: {
+        stockAdded,
+        stockSold,
+        stockReturned,
       },
     });
   } catch (error) {

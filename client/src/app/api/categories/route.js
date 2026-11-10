@@ -43,8 +43,8 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const auth = await verifyAuth(request);
-    if (!auth) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    if (auth.error) {
+      return NextResponse.json({ success: false, message: auth.error }, { status: auth.status });
     }
 
     await connectDB();
@@ -87,8 +87,8 @@ export async function POST(request) {
 export async function DELETE(request) {
   try {
     const auth = await verifyAuth(request);
-    if (!auth) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    if (auth.error) {
+      return NextResponse.json({ success: false, message: auth.error }, { status: auth.status });
     }
 
     await connectDB();

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import MobileAppShell from '../../../../components/layout/MobileAppShell';
 import { useLanguage } from '../../../../context/LanguageContext';
 import { customerApi } from '../../../../lib/api';
@@ -16,10 +16,12 @@ import {
   CheckCircle2,
   X,
   CreditCard,
+  Trash2,
 } from 'lucide-react';
 
 export default function CustomerDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const { t } = useLanguage();
 
   const [customer, setCustomer] = useState(null);
@@ -72,6 +74,17 @@ export default function CustomerDetailPage() {
       alert(err.message || 'Error recording payment');
     } finally {
       setRecordingPayment(false);
+    }
+  };
+
+  const handleDeleteCustomer = async () => {
+    if (window.confirm(`Kya aap "${customer?.name}" ka khata mukammal delete karna chahtay hain?`)) {
+      try {
+        await customerApi.delete(params.id);
+        router.push('/dashboard/customers');
+      } catch (err) {
+        alert(err.message || 'Error deleting customer');
+      }
     }
   };
 
@@ -146,14 +159,25 @@ export default function CustomerDetailPage() {
           </div>
 
           {/* Receive Payment CTA button */}
-          <button
-            type="button"
-            onClick={() => setShowPaymentModal(true)}
-            className="w-full py-2.5 bg-kiryana-freshGreen text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-transform"
-          >
-            <CreditCard className="w-4 h-4" />
-            <span>Receive Khata Payment (وصولی)</span>
-          </button>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowPaymentModal(true)}
+              className="py-2.5 bg-kiryana-freshGreen text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-transform"
+            >
+              <CreditCard className="w-4 h-4" />
+              <span>Wasooli (Payment)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDeleteCustomer}
+              className="py-2.5 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Delete Khata</span>
+            </button>
+          </div>
         </div>
 
         {/* Purchase History Receipts */}

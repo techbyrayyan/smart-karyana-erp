@@ -54,16 +54,11 @@ export async function DELETE(request, { params }) {
     if (auth.error) return NextResponse.json({ success: false, message: auth.error }, { status: auth.status });
 
     await connectDB();
-    // Soft delete / archive
-    const customer = await Customer.findByIdAndUpdate(
-      params.id,
-      { $set: { isArchived: true } },
-      { new: true }
-    );
+    const customer = await Customer.findByIdAndDelete(params.id);
     if (!customer) {
       return NextResponse.json({ success: false, message: 'Customer not found' }, { status: 404 });
     }
-    return NextResponse.json({ success: true, message: 'Customer archived successfully' });
+    return NextResponse.json({ success: true, message: 'Customer deleted successfully' });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }

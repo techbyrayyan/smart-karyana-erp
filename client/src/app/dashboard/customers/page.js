@@ -14,6 +14,8 @@ import {
   AlertCircle,
   X,
   Check,
+  Trash2,
+  CheckCircle2,
 } from 'lucide-react';
 
 export default function CustomersPage() {
@@ -86,6 +88,32 @@ export default function CustomersPage() {
   // Total outstanding balance across all customers
   const totalUdhaar = customers.reduce((sum, c) => sum + (c.balance || 0), 0);
 
+  const handleDeleteCustomer = async (e, id, name) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (window.confirm(`Kya aap "${name}" ka khata mukammal delete karna chahtay hain?`)) {
+      try {
+        await customerApi.delete(id);
+        fetchCustomers();
+      } catch (err) {
+        alert(err.message || 'Error deleting customer');
+      }
+    }
+  };
+
+  const handleClearUdhaar = async (e, id, name, balance) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (window.confirm(`Kya "${name}" ne Rs. ${balance} ka sara udhaar ada kar diya hai?`)) {
+      try {
+        await customerApi.recordPayment(id, balance, 'Full udhaar paid and cleared');
+        fetchCustomers();
+      } catch (err) {
+        alert(err.message || 'Error recording payment');
+      }
+    }
+  };
+
   return (
     <MobileAppShell title={t('customersTitle')}>
       {/* Top Udhaar Summary Banner */}
@@ -150,14 +178,16 @@ export default function CustomersPage() {
       ) : (
         <div className="space-y-2.5">
           {customers.map((c) => (
-            <Link
+            <div
               key={c._id}
-              href={`/dashboard/customers/${c._id}`}
-              className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-card-soft hover:border-gray-200 block transition-all active:scale-98"
+              className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-card-soft hover:border-gray-200 transition-all space-y-2.5"
             >
               <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="text-xs font-bold text-gray-900">{c.name}</h4>
+                <Link
+                  href={`/dashboard/customers/${c._id}`}
+                  className="flex-1 min-w-0 pr-2 hover:opacity-80"
+                >
+                  <h4 className="text-xs font-bold text-gray-900 truncate">{c.name}</h4>
                   {c.phone && (
                     <p className="text-[10px] text-gray-500 flex items-center gap-1 mt-0.5">
                       <Phone className="w-3 h-3 text-gray-400" />
@@ -167,9 +197,9 @@ export default function CustomersPage() {
                   <p className="text-[10px] text-gray-400 mt-0.5">
                     {c.totalPurchases || 0} Bills • Total Spent: Rs. {(c.totalSpent || 0).toLocaleString()}
                   </p>
-                </div>
+                </Link>
 
-                <div className="text-right">
+                <div className="text-right flex-shrink-0">
                   <span className="text-[10px] text-gray-400 block">Balance</span>
                   <span
                     className={`text-xs font-mono font-black ${
@@ -183,7 +213,41 @@ export default function CustomersPage() {
                   )}
                 </div>
               </div>
-            </Link>
+
+              {/* Action Buttons: Clear Udhaar & Delete Khata */}
+              <div className="flex items-center justify-between pt-2 border-t border-gray-100 gap-2">
+                <Link
+                  href={`/dashboard/customers/${c._id}`}
+                  className="text-[11px] font-bold text-gray-600 hover:text-kiryana-darkGreen py-1"
+                >
+                  View Details →
+                </Link>
+
+                <div className="flex items-center gap-1.5">
+                  {c.balance > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleClearUdhaar(e, c._id, c.name, c.balance)}
+                      className="text-[10px] font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-lg flex items-center gap-1 transition-colors"
+                      title="Clear Udhaar (Khata Zero)"
+                    >
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                      <span>Wasool Ho Gaya</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteCustomer(e, c._id, c.name)}
+                    className="text-[10px] font-bold bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2 py-1 rounded-lg flex items-center gap-1 transition-colors"
+                    title="Delete Khata Record"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           ))}
         </div>
       )}
