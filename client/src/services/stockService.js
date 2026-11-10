@@ -1,6 +1,7 @@
 import Product from '../models/Product.js';
 import StockMovement from '../models/StockMovement.js';
 import ShopProfile from '../models/ShopProfile.js';
+import Category from '../models/Category.js';
 
 /**
  * Decrement stock for sold items with unit variation conversion
@@ -92,14 +93,26 @@ export async function addPurchaseStock(purchaseItems, purchaseId, notes = 'Suppl
       movements.push(movement);
     } else {
       const multiplier = Number(item.multiplier) || 1;
-      const baseStock = Number(item.quantity) * multiplier;
-      const purchasePricePerBase = parseFloat((Number(item.unitPrice) / multiplier).toFixed(2));
-      const defaultSellingPrice = Math.round(purchasePricePerBase * 1.15);
+      const baseStock = Number(item.quantity) * multiplier || 0;
+      const rawPrice = Number(item.unitPrice) || 0;
+      const purchasePricePerBase = multiplier > 0 ? parseFloat((rawPrice / multiplier).toFixed(2)) : rawPrice;
+      const defaultSellingPrice = Number(item.sellingPrice) || Math.round(purchasePricePerBase * 1.15) || 0;
+      const categoryName = (item.category || 'General Kiryana').trim();
+
+      if (categoryName) {
+        try {
+          await Category.findOneAndUpdate(
+            { name: { $regex: new RegExp(`^${categoryName.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } },
+            { $setOnInsert: { name: categoryName } },
+            { upsert: true }
+          );
+        } catch (e) {}
+      }
 
       const newProduct = await Product.create({
-        name: item.productName,
-        nameUrdu: item.productNameUrdu || '',
-        category: item.category || 'General Kiryana',
+        name: (item.productName || 'New Product').trim(),
+        nameUrdu: (item.productNameUrdu || '').trim(),
+        category: categoryName,
         productImage: item.productImage || '',
         purchasePrice: purchasePricePerBase,
         sellingPrice: defaultSellingPrice,

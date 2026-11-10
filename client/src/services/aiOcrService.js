@@ -2,43 +2,50 @@ import Product from '../models/Product.js';
 
 const PROMPT_TEXT = `
 You are an expert Kiryana / Grocery Wholesale Invoice and Cash Memo parser for Pakistan/South Asian grocery businesses.
-Analyze this supplier invoice or receipt image carefully.
-It may be printed, typed, thermal slip, or handwritten (in English, Urdu, or mixed Roman Urdu from Akbari Mandi, Jodia Bazaar, wholesale grain distributors, or FMCG distributors like Unilever, Nestlé, National Foods, Shan, Tapal, etc.).
+Analyze this supplier invoice, cash receipt, or handwritten grocery slip / parchi carefully.
+It may be:
+- Printed / typed wholesale invoice (from Akbari Mandi, Jodia Bazaar, wholesale grain distributors, FMCG distributors like Unilever, Nestlé, National Foods, Shan, Tapal, etc.)
+- Thermal receipt slip
+- Handwritten note / parchi in Urdu script (e.g. چینی, آٹا, چاول, ٹوٹا چاول, دال چنا, دال مسور, گھی, کوکنگ آئل, صابن, لکس, شیمپو, مصالحہ جات)
+- Mixed English, Roman Urdu, or Urdu.
 
-Extract EVERY single product line item. Do NOT truncate or limit to a small number of items. If there are 5, 20, or 50 items, extract all of them.
+Extract EVERY single item from the slip/invoice without omitting any line.
 
 Return ONLY a strict JSON object with this exact structure:
 {
-  "supplierName": "Name of wholesale supplier / mandi shop or General Supplier",
+  "supplierName": "Name of wholesale supplier / mandi shop or General Kiryana Supplier",
   "invoiceNumber": "Invoice or memo number if visible, otherwise generate sensible memo id like INV-DATE",
   "invoiceDate": "YYYY-MM-DD formatted date, or current date if not visible",
   "items": [
     {
-      "productName": "Product name in English (e.g. Super Basmati Rice, Sugar, Banaspati Ghee)",
-      "productNameUrdu": "Urdu name if visible or applicable (e.g. چاول باسمتی, چینی, بناسپتی گھی)",
-      "quantity": 10,
+      "productName": "Product name in English or common Roman name (e.g. Sugar, Super Basmati Rice, Atta, Chana Daal, Banaspati Ghee, Lux Soap)",
+      "productNameUrdu": "Exact Urdu script name (e.g. چینی, چاول, آٹا, دال چنا, بناسپتی گھی, لکس صابن)",
+      "quantity": 1,
       "unit": "KG / Gram / Liter / ML / Packet / Piece / Dozen / Box / Bori / Peti",
-      "unitPrice": 250,
-      "lineTotal": 2500,
+      "unitPrice": 0,
+      "lineTotal": 0,
       "multiplier": 1.0,
-      "category": "Daalen / Pulses | Atta / Grains | Ghee / Cooking Oil | Spices / Masalay | Beverages | Dairy | Snacks | Soaps & Detergents | General",
+      "category": "Atta / Grains | Daalen / Pulses | Ghee / Cooking Oil | Spices / Masalay | Beverages | Dairy | Snacks | Soaps & Detergents | General Kiryana",
       "confidence": 0.95
     }
   ],
-  "subtotal": 2500,
+  "subtotal": 0,
   "discount": 0,
   "tax": 0,
-  "grandTotal": 2500,
-  "notes": "Any payment terms, vehicle number, or mandi broker notes"
+  "grandTotal": 0,
+  "notes": "Any notes or payment terms"
 }
 
-Important parsing rules:
-1. Ensure quantity * unitPrice approximately equals lineTotal. If a line gives total and quantity, compute unitPrice = lineTotal / quantity.
-2. For traditional wholesale units:
-   - "Bori" (sack) of Sugar / Rice / Flour is typically 50 KG (multiplier: 50) or 40 KG (maund). Note this in multiplier if unit is KG.
-   - "Peti" / Carton usually contains multiple packets or pieces.
-   - Default standard base units: "KG", "Liter", "Packet", "Piece", "Dozen".
-3. Numbers must be numeric, not strings.
+Important parsing rules for Urdu & Kiryana items:
+1. Handwritten Urdu Slips & Missing Prices:
+   - On grocery shopping lists, customer slips, or parchis, prices are often NOT written (only items and quantities are written, e.g. "چاول 1 کلو", "آٹا 2 کلو", "چنے کی دال 1 کلو", "لکس صابن 2").
+   - If unit price or line total is NOT explicitly written on the slip, set unitPrice: 0 and lineTotal: 0. Do NOT drop, skip, or fail the item!
+2. Urdu Numerals & Fractional Quantities:
+   - Convert Urdu numerals (۱, ۲, ۳, ۴, ۵, ۶, ۷, ۸, ۹, ۰) or written numbers (ایک, دو, تین, آدھا = 0.5, پاؤ = 0.25) to standard numeric quantities.
+3. Quantities & Units:
+   - If quantity is omitted or just a count like "لکس صابن 2", set quantity: 2, unit: "Piece".
+   - Default base units: "KG", "Liter", "Piece", "Packet", "Dozen", "Bori".
+4. Numbers must be numeric (not strings).
 `;
 
 /**
@@ -54,15 +61,16 @@ export async function parseInvoiceImages(imageFiles) {
 
   // Discard any deprecated model name (especially gemini-2.5-*)
   let configuredModel = process.env.AI_OCR_MODEL;
-  if (!configuredModel || configuredModel.includes('2.5')) {
-    configuredModel = 'gemini-3.5-flash';
+  if (!configuredModel || configuredModel.includes('2.5') || configuredModel.includes('3.8')) {
+    configuredModel = 'gemini-3.5-flash-lite';
   }
 
+  // gemini-3.5-flash-lite is the fastest (~1.5s) and most resilient model for multimodal vision OCR
   const candidateModels = [
+    'gemini-3.5-flash-lite',
     configuredModel,
     'gemini-3.5-flash',
-    'gemini-3.8-flash',
-    'gemini-flash-latest',
+    'gemini-3.6-flash',
   ].filter((v, i, a) => a.indexOf(v) === i && !v.includes('2.5'));
 
   const parts = [{ text: PROMPT_TEXT }];
@@ -93,7 +101,7 @@ export async function parseInvoiceImages(imageFiles) {
     try {
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 14000); // 14s fast timeout per attempt
+      const timeoutId = setTimeout(() => controller.abort(), 35000); // Generous 35s timeout for complex handwriting
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -114,7 +122,11 @@ export async function parseInvoiceImages(imageFiles) {
         lastError = new Error(`Google AI OCR Vision API error (${response.status}): ${errText}`);
       }
     } catch (err) {
-      lastError = err;
+      if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+        lastError = new Error('AI Vision OCR request timed out while analyzing handwriting. Please try again with a clearer picture.');
+      } else {
+        lastError = err;
+      }
     }
   }
 
