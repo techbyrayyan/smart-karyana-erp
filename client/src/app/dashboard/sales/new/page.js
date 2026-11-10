@@ -129,13 +129,54 @@ export default function NewSalePage() {
   const [notes, setNotes] = useState('');
 
   // Receipt Scanning States
-  const [receiptMode, setReceiptMode] = useState(false); // Toggle receipt scan UI
+  const [receiptMode, setReceiptMode] = useState(true); // Default to AI Parchi Scanner mode
   const [receiptImages, setReceiptImages] = useState([]);
   const [receiptScanning, setReceiptScanning] = useState(false);
   const [receiptScannedItems, setReceiptScannedItems] = useState([]); // AI-extracted items
   const [receiptError, setReceiptError] = useState('');
   const receiptFileRef = React.useRef(null);
   const receiptCameraRef = React.useRef(null);
+
+  // Helper to convert scanned items to cart items
+  const buildCartFromScannedItems = (items) => {
+    return items
+      .filter((item) => item._selected !== false)
+      .map((item) => {
+        const unitPrice = Number(item.unitPrice) || Number(item.rateListPrice) || 0;
+        const quantity = Number(item.quantity) || 1;
+        const unit = item.unit || 'KG';
+        const unitType = ['kg', 'gram', 'liter', 'ml'].some((u) => unit.toLowerCase().includes(u)) ? 'weight' : 'piece';
+
+        let lineTotal = Number(item.lineTotal) || 0;
+        if (lineTotal <= 0) {
+          if (unitType === 'weight') {
+            let grams = quantity;
+            if (unit.toLowerCase().includes('kg')) grams = quantity * 1000;
+            lineTotal = Math.round(((grams / 1000) * unitPrice + Number.EPSILON) * 100) / 100;
+          } else {
+            lineTotal = Math.round((quantity * unitPrice + Number.EPSILON) * 100) / 100;
+          }
+        }
+
+        const displayName = unitType === 'weight'
+          ? (unit.toLowerCase().includes('gram') ? `${quantity} Gram` : `${quantity} ${unit}`)
+          : `${quantity} ${unit}`;
+
+        return {
+          product: item.matchedProductId || null,
+          productId: item.matchedDisplayId || null,
+          productName: item.matchedProductName || item.productName || 'Unknown Item',
+          variationName: displayName,
+          quantity: unitType === 'weight' && unit.toLowerCase().includes('gram') ? quantity / 1000 : quantity,
+          grams: unitType === 'weight' ? (unit.toLowerCase().includes('gram') ? quantity : quantity * 1000) : undefined,
+          unit: unitType === 'weight' ? 'KG' : unit,
+          multiplier: 1,
+          unitPrice,
+          lineTotal,
+          isFromReceipt: true,
+        };
+      });
+  };
 
   // Handle receipt image selection (camera or gallery)
   const handleReceiptImageSelect = (e) => {
@@ -175,10 +216,14 @@ export default function NewSalePage() {
       if (res.success && res.data && res.data.items) {
         const items = res.data.items.map((item, idx) => ({
           ...item,
-          _selected: true, // Default all selected
+          _selected: true,
           _editingPrice: false,
         }));
         setReceiptScannedItems(items);
+
+        // Auto populate cart immediately so bill is ready on scan!
+        const autoCartItems = buildCartFromScannedItems(items);
+        setCart(autoCartItems);
       } else {
         setReceiptError(res.message || 'Failed to scan receipt');
       }
@@ -191,51 +236,9 @@ export default function NewSalePage() {
 
   // Add scanned items to cart
   const handleAddScannedItemsToCart = () => {
-    const selectedItems = receiptScannedItems.filter((item) => item._selected);
-    if (selectedItems.length === 0) return;
-
-    const newCartItems = selectedItems.map((item) => {
-      const unitPrice = Number(item.unitPrice) || Number(item.rateListPrice) || 0;
-      const quantity = Number(item.quantity) || 1;
-      const unit = item.unit || 'KG';
-      const unitType = ['kg', 'gram', 'liter', 'ml'].some((u) => unit.toLowerCase().includes(u)) ? 'weight' : 'piece';
-
-      let lineTotal = Number(item.lineTotal) || 0;
-      if (lineTotal <= 0) {
-        if (unitType === 'weight') {
-          // Convert unit to grams for calculation
-          let grams = quantity;
-          if (unit.toLowerCase().includes('kg')) grams = quantity * 1000;
-          lineTotal = Math.round(((grams / 1000) * unitPrice + Number.EPSILON) * 100) / 100;
-        } else {
-          lineTotal = Math.round((quantity * unitPrice + Number.EPSILON) * 100) / 100;
-        }
-      }
-
-      const displayName = unitType === 'weight'
-        ? (unit.toLowerCase().includes('gram') ? `${quantity} Gram` : `${quantity} ${unit}`)
-        : `${quantity} ${unit}`;
-
-      return {
-        product: item.matchedProductId || null,
-        productId: item.matchedDisplayId || null,
-        productName: item.matchedProductName || item.productName || 'Unknown Item',
-        variationName: displayName,
-        quantity: unitType === 'weight' && unit.toLowerCase().includes('gram') ? quantity / 1000 : quantity,
-        grams: unitType === 'weight' ? (unit.toLowerCase().includes('gram') ? quantity : quantity * 1000) : undefined,
-        unit: unitType === 'weight' ? 'KG' : unit,
-        multiplier: 1,
-        unitPrice,
-        lineTotal,
-        isFromReceipt: true,
-      };
-    });
-
-    setCart((prev) => [...prev, ...newCartItems]);
-    // Clear receipt scanning state
-    setReceiptScannedItems([]);
-    clearReceiptImages();
-    setReceiptMode(false);
+    const newCartItems = buildCartFromScannedItems(receiptScannedItems);
+    if (newCartItems.length === 0) return;
+    setCart(newCartItems);
   };
 
   // Toggle item selection in scanned list
@@ -243,6 +246,8 @@ export default function NewSalePage() {
     setReceiptScannedItems((prev) => {
       const copy = [...prev];
       copy[idx] = { ...copy[idx], _selected: !copy[idx]._selected };
+      const updatedCart = buildCartFromScannedItems(copy);
+      setCart(updatedCart);
       return copy;
     });
   };
@@ -258,6 +263,8 @@ export default function NewSalePage() {
         unitPrice: price,
         lineTotal: Math.round((quantity * price + Number.EPSILON) * 100) / 100,
       };
+      const updatedCart = buildCartFromScannedItems(copy);
+      setCart(updatedCart);
       return copy;
     });
   };
@@ -466,6 +473,9 @@ export default function NewSalePage() {
                 setNotes('');
                 setSelectedCustomer(null);
                 setIsWalkIn(true);
+                clearReceiptImages();
+                setReceiptScannedItems([]);
+                setReceiptMode(true);
               }}
               className="text-xs bg-kiryana-freshGreen text-white font-bold py-1.5 px-3 rounded-xl shadow-sm"
             >
@@ -510,31 +520,31 @@ export default function NewSalePage() {
           </div>
 
           {/* Dynamic Category Selector Bar (Pehle Category Select Karein: e.g. Rice, Atta) */}
-          {/* === RECEIPT SCAN / MANUAL TOGGLE === */}
+          {/* === MODE SELECTOR: Parchi Scan (Primary) vs Manual Catalog === */}
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => { setReceiptMode(false); setReceiptError(''); }}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                !receiptMode
-                  ? 'bg-kiryana-darkGreen text-white shadow-sm'
+              onClick={() => setReceiptMode(true)}
+              className={`flex-1 py-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                receiptMode
+                  ? 'bg-kiryana-darkGreen text-white shadow-md ring-2 ring-emerald-500/20'
                   : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
               }`}
             >
-              <ShoppingCart className="w-3.5 h-3.5" />
-              <span>Manual Sale</span>
+              <Camera className="w-4 h-4 text-emerald-400" />
+              <span>📷 Scan Customer Parchi</span>
             </button>
             <button
               type="button"
-              onClick={() => setReceiptMode(true)}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                receiptMode
-                  ? 'bg-kiryana-darkGreen text-white shadow-sm'
+              onClick={() => { setReceiptMode(false); setReceiptError(''); }}
+              className={`flex-1 py-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                !receiptMode
+                  ? 'bg-kiryana-darkGreen text-white shadow-md ring-2 ring-emerald-500/20'
                   : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
               }`}
             >
-              <Camera className="w-3.5 h-3.5" />
-              <span>📷 Scan Parchi</span>
+              <ShoppingCart className="w-4 h-4 text-emerald-400" />
+              <span>🛒 Manual Catalog Sale</span>
             </button>
           </div>
 

@@ -253,7 +253,7 @@ export async function parseRateListImages(imageFiles) {
     const { product: matchedProd, score } = findBestProductMatch(item, existingProducts);
 
     const isExisting = !!matchedProd && score >= 0.8;
-    const currentPrice = isExisting ? (matchedProd.pricePerUnit || matchedProd.salePrice || 0) : null;
+    const currentPrice = isExisting ? (matchedProd.sellingPrice || matchedProd.pricePerUnit || matchedProd.salePrice || matchedProd.variations?.[0]?.price || 0) : null;
     const priceChanged = isExisting && cleanPrice > 0 && cleanPrice !== currentPrice;
 
     return {
@@ -298,7 +298,7 @@ export async function parseInvoiceImages(imageFiles) {
     const { product: bestMatch } = findBestProductMatch(item, existingProducts);
     const quantity = Number(item.quantity) || 1;
     const unit = item.unit || bestMatch?.unit || 'KG';
-    const rateListPrice = bestMatch ? (bestMatch.pricePerUnit || bestMatch.salePrice || 0) : 0;
+    const rateListPrice = bestMatch ? (bestMatch.sellingPrice || bestMatch.pricePerUnit || bestMatch.salePrice || bestMatch.variations?.[0]?.price || 0) : 0;
 
     let unitPrice = Number(item.unitPrice) || 0;
     let isRateListPriceApplied = false;

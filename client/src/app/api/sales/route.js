@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic';
+import mongoose from 'mongoose';
 import { NextResponse } from 'next/server';
 import connectDB from '../../../lib/db';
 import { verifyAuth } from '../../../lib/authHelper';
@@ -90,26 +91,33 @@ export async function POST(request) {
     for (const item of items) {
       const prodId = item.product?._id || item.product;
       let product = null;
-      if (prodId) {
+      if (prodId && mongoose.Types.ObjectId.isValid(String(prodId))) {
         product = await Product.findById(prodId);
       }
-      if (!product) {
-        return NextResponse.json({ success: false, message: `Product not found: ${item.productName}` }, { status: 404 });
+      if (!product && item.productId) {
+        product = await Product.findOne({ productId: item.productId });
+      }
+      if (!product && item.productName) {
+        product = await Product.findOne({
+          name: { $regex: new RegExp(`^${item.productName.trim().replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') },
+          isArchived: false,
+        });
       }
 
       const qty = Number(item.quantity) || 1;
-      const price = Number(item.unitPrice) || product.sellingPrice;
+      const price = Number(item.unitPrice) || (product ? (product.sellingPrice || product.pricePerUnit || product.salePrice || 0) : 0);
       const mult = Number(item.multiplier) || 1;
       const lineTotal = Number(item.lineTotal) || parseFloat((qty * price).toFixed(2));
-      const costPrice = parseFloat(((product.purchasePrice || 0) * mult).toFixed(2));
+      const costPrice = product ? parseFloat(((product.purchasePrice || 0) * mult).toFixed(2)) : 0;
 
       subtotal += lineTotal;
       processedItems.push({
-        product: product._id,
-        productName: item.productName || product.name,
-        variationName: item.variationName || `${qty} ${item.unit || product.unit}`,
+        product: product ? product._id : undefined,
+        productId: product ? product.productId : (item.productId || undefined),
+        productName: item.productName || product?.name || 'Item',
+        variationName: item.variationName || `${qty} ${item.unit || product?.unit || 'KG'}`,
         quantity: qty,
-        unit: item.unit || product.unit,
+        unit: item.unit || product?.unit || 'KG',
         multiplier: mult,
         unitPrice: price,
         costPrice,

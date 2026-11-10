@@ -8,15 +8,15 @@ import Category from '../models/Category.js';
  */
 export async function deductSaleStock(saleItems, saleId, notes = 'Customer Sale') {
   const profile = await ShopProfile.findOne();
-  const allowNegative = profile?.allowNegativeStock ?? false;
+  // Default to true for Kiryana stores so sales are never blocked when selling fresh stock
+  const allowNegative = profile?.allowNegativeStock !== undefined ? profile.allowNegativeStock : true;
 
   const movements = [];
 
   for (const item of saleItems) {
+    if (!item.product) continue;
     const product = await Product.findById(item.product);
-    if (!product) {
-      throw new Error(`Product not found: ${item.productName}`);
-    }
+    if (!product) continue;
 
     const multiplier = Number(item.multiplier) || 1;
     const baseQuantityDeduction = Number(item.quantity) * multiplier;
