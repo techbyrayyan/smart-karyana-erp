@@ -85,6 +85,10 @@ export default function RateListManagementPage() {
   });
   const [savingSingle, setSavingSingle] = useState(false);
 
+  // Delete Product State
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingProduct, setDeletingProduct] = useState(false);
+
   // Fetch Rate List
   const fetchRateList = async () => {
     try {
@@ -372,6 +376,33 @@ export default function RateListManagementPage() {
       alert(err.message || 'Error adding product');
     } finally {
       setSavingSingle(false);
+    }
+  };
+
+  // Delete Product from Rate List
+  const handleDeleteProduct = async () => {
+    if (!deleteTarget) return;
+    setDeletingProduct(true);
+    setError('');
+    try {
+      const res = await rateListApi.deleteProduct(deleteTarget._id);
+      if (res.success) {
+        setSuccessMsg(`"${deleteTarget.name}" deleted from rate list successfully.`);
+        setProducts((prev) => prev.filter((p) => p._id !== deleteTarget._id));
+        setStats((prev) => ({
+          ...prev,
+          totalItems: Math.max(0, prev.totalItems - 1),
+          weightItems: deleteTarget.unitType === 'weight' ? Math.max(0, prev.weightItems - 1) : prev.weightItems,
+          pieceItems: deleteTarget.unitType !== 'weight' ? Math.max(0, prev.pieceItems - 1) : prev.pieceItems,
+        }));
+        setDeleteTarget(null);
+      } else {
+        setError(res.message || 'Failed to delete product');
+      }
+    } catch (err) {
+      setError(err.message || 'Error deleting product');
+    } finally {
+      setDeletingProduct(false);
     }
   };
 
@@ -663,6 +694,14 @@ export default function RateListManagementPage() {
                               title="Quick Edit Price"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(prod)}
+                              className="p-1 text-gray-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
+                              title="Delete from Rate List"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         )}
@@ -1321,6 +1360,51 @@ export default function RateListManagementPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-gray-100 space-y-4">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h4 className="text-sm font-bold text-gray-900">Delete Product from Rate List?</h4>
+              <p className="text-xs text-gray-500">
+                Kya aap <strong className="text-gray-800">"{deleteTarget.name}"</strong>{' '}
+                {deleteTarget.productId ? `(ID #${deleteTarget.productId})` : ''} ko Rate List se delete karna chahte hain?
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={deletingProduct}
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingProduct}
+                onClick={handleDeleteProduct}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-1.5"
+              >
+                {deletingProduct ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Product</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

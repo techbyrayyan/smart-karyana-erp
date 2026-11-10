@@ -206,3 +206,41 @@ export async function POST(request) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/ratelist
+ * Delete / Archive a product from the rate list
+ */
+export async function DELETE(request) {
+  try {
+    const auth = await verifyAuth(request);
+    if (auth.error) {
+      return NextResponse.json({ success: false, message: auth.error }, { status: auth.status });
+    }
+
+    await connectDB();
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ success: false, message: 'Product ID is required' }, { status: 400 });
+    }
+
+    const product = await Product.findById(id);
+    if (!product) {
+      return NextResponse.json({ success: false, message: 'Product not found' }, { status: 404 });
+    }
+
+    product.isArchived = true;
+    await product.save();
+
+    return NextResponse.json({
+      success: true,
+      message: `Product "${product.name}" deleted from rate list successfully`,
+      productId: product.productId,
+    });
+  } catch (error) {
+    console.error('Rate list DELETE error:', error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  }
+}

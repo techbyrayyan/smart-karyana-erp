@@ -19,6 +19,7 @@ import {
   Filter,
   FolderPlus,
   X,
+  RefreshCw,
 } from 'lucide-react';
 
 export default function ProductsPage() {
@@ -36,6 +37,11 @@ export default function ProductsPage() {
   const [newCatName, setNewCatName] = useState('');
   const [newCatUrdu, setNewCatUrdu] = useState('');
   const [catError, setCatError] = useState('');
+
+  // Delete modal state
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteSuccess, setDeleteSuccess] = useState('');
 
   const fetchCategories = async () => {
     try {
@@ -104,15 +110,20 @@ export default function ProductsPage() {
     }
   };
 
-  const handleDelete = async (id, name) => {
-    if (window.confirm(`${t('deleteConfirm')}\n"${name}"`)) {
-      try {
-        await productApi.delete(id);
-        fetchProducts();
-        fetchCategories();
-      } catch (err) {
-        alert(err.message || 'Error deleting product');
-      }
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await productApi.delete(deleteTarget._id);
+      setDeleteSuccess(`"${deleteTarget.name}" deleted successfully.`);
+      setProducts((prev) => prev.filter((p) => p._id !== deleteTarget._id));
+      setDeleteTarget(null);
+      fetchCategories();
+      setTimeout(() => setDeleteSuccess(''), 3000);
+    } catch (err) {
+      alert(err.message || 'Error deleting product');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -378,7 +389,7 @@ export default function ProductsPage() {
                     </Link>
 
                     <button
-                      onClick={() => handleDelete(prod._id, prod.name)}
+                      onClick={() => setDeleteTarget(prod)}
                       className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-50 rounded-lg transition-colors"
                       title={t('delete')}
                     >
@@ -389,6 +400,56 @@ export default function ProductsPage() {
               </div>
             );
           })}
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-gray-100 space-y-4">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h4 className="text-sm font-bold text-gray-900">Delete Product?</h4>
+              <p className="text-xs text-gray-500">
+                Kya aap <strong className="text-gray-800">"{deleteTarget.name}"</strong> ko delete karna chahte hain?
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={handleConfirmDelete}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-1.5"
+              >
+                {deleting ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteSuccess && (
+        <div className="fixed bottom-20 left-4 right-4 z-50 bg-emerald-800 text-white p-3 rounded-2xl shadow-lg flex items-center justify-between text-xs animate-fade-in">
+          <span>{deleteSuccess}</span>
+          <button onClick={() => setDeleteSuccess('')}>✕</button>
         </div>
       )}
     </MobileAppShell>

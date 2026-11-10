@@ -245,4 +245,8 @@ export const rateListApi = {
       body: JSON.stringify(payload),
     }),
   getHistory: () => apiRequest('/ratelist/history'),
+  deleteProduct: (id) =>
+    apiRequest(`/ratelist?id=${id}`, {
+      method: 'DELETE',
+    }),
 };
