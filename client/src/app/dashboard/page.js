@@ -21,6 +21,7 @@ import {
   ArrowDownLeft,
   RotateCcw,
   RefreshCw,
+  Scale,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -70,7 +71,7 @@ export default function DashboardPage() {
   return (
     <MobileAppShell title={profile?.storeName || t('appName')}>
       {/* Quick Action Banner */}
-      <div className="grid grid-cols-2 gap-2.5 mb-4">
+      <div className="grid grid-cols-2 gap-2.5 mb-2.5">
         <Link
           href="/dashboard/sales/new"
           className="flex items-center gap-2.5 bg-kiryana-freshGreen text-white p-3 rounded-2xl shadow-sm hover:bg-kiryana-darkGreen active:scale-98 transition-all"
@@ -97,6 +98,21 @@ export default function DashboardPage() {
           </div>
         </Link>
       </div>
+
+      {/* Rate List Quick Button */}
+      <Link
+        href="/dashboard/ratelist"
+        className="flex items-center gap-3 bg-white border border-lime-200 hover:border-lime-400 p-3 rounded-2xl shadow-card-soft mb-4 active:scale-98 transition-all"
+      >
+        <div className="w-9 h-9 rounded-xl bg-lime-100 text-lime-700 flex items-center justify-center flex-shrink-0">
+          <Scale className="w-5 h-5" />
+        </div>
+        <div className="flex-1">
+          <div className="text-xs font-bold text-gray-900 leading-tight">Rate List Management</div>
+          <div className="text-[10px] text-gray-500">Upload, View & Update Product Prices with AI</div>
+        </div>
+        <ArrowUpRight className="w-4 h-4 text-lime-600 flex-shrink-0" />
+      </Link>
 
       {/* Header with Refresh button */}
       <div className="flex items-center justify-between mb-3 px-1">

@@ -18,6 +18,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Store,
+  Scale,
 } from 'lucide-react';
 
 export default function MoreMenuPage() {
@@ -48,6 +49,13 @@ export default function MoreMenuPage() {
           href: '/dashboard/products',
           icon: Package,
           color: 'bg-amber-50 text-amber-600',
+        },
+        {
+          title: 'Rate List',
+          subtitle: 'AI Rate List Upload, Pricing & Weight Calculator',
+          href: '/dashboard/ratelist',
+          icon: Scale,
+          color: 'bg-lime-50 text-lime-700',
         },
         {
           title: t('receipts'),

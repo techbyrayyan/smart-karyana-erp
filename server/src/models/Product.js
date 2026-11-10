@@ -1,5 +1,35 @@
 const mongoose = require('mongoose');
 
+const priceHistorySchema = new mongoose.Schema(
+  {
+    price: {
+      type: Number,
+      required: true,
+    },
+    purchasePrice: {
+      type: Number,
+      default: 0,
+    },
+    unit: {
+      type: String,
+      default: 'KG',
+    },
+    changedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    source: {
+      type: String,
+      default: 'rate_list_update',
+    },
+    notes: {
+      type: String,
+      default: '',
+    },
+  },
+  { _id: true }
+);
+
 const variationSchema = new mongoose.Schema(
   {
     name: {
@@ -15,7 +45,7 @@ const variationSchema = new mongoose.Schema(
     multiplier: {
       type: Number,
       required: true,
-      default: 1, // Quantity of baseUnit this variation consumes. e.g., 500g = 0.5 of 1kg base unit.
+      default: 1,
     },
     price: {
       type: Number,
@@ -31,12 +61,23 @@ const variationSchema = new mongoose.Schema(
 
 const productSchema = new mongoose.Schema(
   {
+    productId: {
+      type: Number,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
     name: {
       type: String,
       required: true,
       trim: true,
     },
     nameUrdu: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    variant: {
       type: String,
       trim: true,
       default: '',
@@ -60,6 +101,10 @@ const productSchema = new mongoose.Schema(
       required: true,
       default: 0,
     },
+    pricePerUnit: {
+      type: Number,
+      default: 0,
+    },
     currentStock: {
       type: Number,
       required: true,
@@ -68,14 +113,24 @@ const productSchema = new mongoose.Schema(
     unit: {
       type: String,
       required: true,
-      default: 'KG', // Base unit: KG, Liter, Piece, Packet, Dozen, etc.
+      default: 'KG',
       trim: true,
+    },
+    unitType: {
+      type: String,
+      enum: ['weight', 'piece'],
+      default: 'weight',
     },
     minStockAlert: {
       type: Number,
       default: 5,
     },
     variations: [variationSchema],
+    priceHistory: [priceHistorySchema],
+    lastRateListUpdate: {
+      type: Date,
+      default: null,
+    },
     isArchived: {
       type: Boolean,
       default: false,
@@ -84,8 +139,10 @@ const productSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-productSchema.index({ name: 'text', nameUrdu: 'text', category: 'text' });
+productSchema.index({ name: 'text', nameUrdu: 'text', category: 'text', variant: 'text' });
 productSchema.index({ currentStock: 1, minStockAlert: 1 });
 productSchema.index({ isArchived: 1 });
+productSchema.index({ productId: 1 });
 
-module.exports = mongoose.model('Product', productSchema);
+const Product = mongoose.models.Product || mongoose.model('Product', productSchema);
+module.exports = Product;

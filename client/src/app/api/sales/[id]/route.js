@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectDB from '../../../../lib/db';
 import { verifyAuth } from '../../../../lib/authHelper';
 import Sale from '../../../../models/Sale';
@@ -60,10 +61,14 @@ export async function PUT(request, { params }) {
     let subtotal = 0;
 
     for (const item of items) {
-      const prodId = item.product?._id || item.product;
+      const rawProdId = item.product?._id || item.product;
       let product = null;
-      if (prodId) {
-        product = await Product.findById(prodId);
+      let validProdId = null;
+      if (rawProdId && mongoose.Types.ObjectId.isValid(rawProdId)) {
+        try {
+          product = await Product.findById(rawProdId);
+          validProdId = product?._id || rawProdId;
+        } catch (e) {}
       }
 
       const qty = Number(item.quantity) || 1;
@@ -74,7 +79,8 @@ export async function PUT(request, { params }) {
 
       subtotal += lineTotal;
       processedItems.push({
-        product: product?._id || prodId,
+        product: validProdId,
+        productId: product?.productId || item.productId || null,
         productName: item.productName || product?.name || 'Item',
         variationName: item.variationName || `${qty} ${item.unit || product?.unit || 'KG'}`,
         quantity: qty,
@@ -100,6 +106,20 @@ export async function PUT(request, { params }) {
       await deductSaleStock(processedItems, sale._id, `Updated items for Receipt #${sale.receiptNumber}`);
     } catch (dedErr) {
       console.warn('Warning during deductSaleStock:', dedErr.message);
+    }
+
+    // Adjust customer balance if udhaar changed
+    if (sale.customer) {
+      try {
+        const customer = await Customer.findById(sale.customer);
+        if (customer) {
+          const balanceDiff = remainingBalance - (sale.remainingBalance || 0);
+          customer.currentBalance = Math.max(0, parseFloat(((customer.currentBalance || 0) + balanceDiff).toFixed(2)));
+          await customer.save();
+        }
+      } catch (cErr) {
+        console.warn('Customer balance adjustment warning:', cErr.message);
+      }
     }
 
     sale.items = processedItems;

@@ -8,6 +8,7 @@ import { useAuth } from '../../../../context/AuthContext';
 import { productApi, customerApi, saleApi, categoryApi } from '../../../../lib/api';
 import ThermalReceipt from '../../../../components/receipt/ThermalReceipt';
 import { getProductImage } from '../../../../lib/productImages';
+import { calculateLinePrice, WEIGHT_PRESETS, getProductUnitType } from '../../../../lib/pricingCalculator';
 import {
   Search,
   Plus,
@@ -23,6 +24,8 @@ import {
   Printer,
   X,
   Package,
+  Scale,
+  Calculator,
 } from 'lucide-react';
 
 export default function NewSalePage() {
@@ -46,6 +49,73 @@ export default function NewSalePage() {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
+
+  // Weight & Quantity Calculator State
+  const [weightCalcProduct, setWeightCalcProduct] = useState(null);
+  const [weightCalcCustomGrams, setWeightCalcCustomGrams] = useState('1000');
+  const [weightCalcUnitMode, setWeightCalcUnitMode] = useState('gram'); // 'gram' | 'kg'
+  const [weightCalcEditingIndex, setWeightCalcEditingIndex] = useState(null);
+
+  const openWeightCalculator = (product, editingIndex = null, initialGrams = 1000) => {
+    setWeightCalcProduct(product);
+    setWeightCalcEditingIndex(editingIndex);
+    setWeightCalcCustomGrams(String(initialGrams));
+    setWeightCalcUnitMode('gram');
+  };
+
+  const handleApplyWeightCalculator = () => {
+    if (!weightCalcProduct) return;
+    const rawVal = Number(weightCalcCustomGrams) || 0;
+    const grams = weightCalcUnitMode === 'kg' ? rawVal * 1000 : rawVal;
+    if (grams <= 0) return;
+
+    const basePrice = Number(weightCalcProduct.pricePerUnit || weightCalcProduct.sellingPrice || 0);
+    const calc = calculateLinePrice({
+      pricePerUnit: basePrice,
+      quantity: grams,
+      unit: 'Gram',
+      unitType: 'weight',
+    });
+
+    const kgQty = grams / 1000;
+    const displayName = grams >= 1000 && grams % 1000 === 0 ? `${grams / 1000} KG` : `${grams} Gram`;
+
+    if (weightCalcEditingIndex !== null) {
+      setCart((prev) => {
+        const copy = [...prev];
+        copy[weightCalcEditingIndex] = {
+          ...copy[weightCalcEditingIndex],
+          variationName: displayName,
+          quantity: kgQty,
+          grams: grams,
+          unit: 'KG',
+          unitPrice: basePrice,
+          lineTotal: calc.lineTotal,
+        };
+        return copy;
+      });
+    } else {
+      setCart((prev) => [
+        ...prev,
+        {
+          product: weightCalcProduct._id,
+          productId: weightCalcProduct.productId || null,
+          productName: weightCalcProduct.name,
+          variationName: displayName,
+          quantity: kgQty,
+          grams: grams,
+          unit: 'KG',
+          multiplier: kgQty,
+          unitPrice: basePrice,
+          lineTotal: calc.lineTotal,
+          productImage: weightCalcProduct.productImage || '',
+        },
+      ]);
+    }
+
+    setWeightCalcProduct(null);
+    setWeightCalcEditingIndex(null);
+  };
 
   // Bill Calculations
   const [discount, setDiscount] = useState('');
@@ -391,7 +461,10 @@ export default function NewSalePage() {
                   <div
                     key={p._id}
                     onClick={() => {
-                      if (p.variations && p.variations.length > 1) {
+                      const isWeight = getProductUnitType(p) === 'weight';
+                      if (isWeight) {
+                        openWeightCalculator(p);
+                      } else if (p.variations && p.variations.length > 1) {
                         setSelectedProduct(p);
                       } else {
                         const defaultVar = p.variations?.[0] || {
@@ -478,8 +551,32 @@ export default function NewSalePage() {
 
                     <div className="flex-1 min-w-0 pr-1">
                       <div className="text-xs font-bold text-gray-900 truncate">{item.productName}</div>
-                      <div className="text-[10px] text-gray-500">
-                        {item.variationName} @ Rs. {item.unitPrice}
+                      <div className="text-[10px] text-gray-500 flex items-center gap-1.5 flex-wrap">
+                        <span>{item.variationName} @ Rs. {item.unitPrice}</span>
+                        {(item.unit === 'KG' || item.grams || item.unitType === 'weight') && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const matchingProd = products.find((p) => p._id === item.product) || {
+                                _id: item.product,
+                                name: item.productName,
+                                pricePerUnit: item.unitPrice,
+                                sellingPrice: item.unitPrice,
+                                unitType: 'weight',
+                              };
+                              openWeightCalculator(
+                                matchingProd,
+                                idx,
+                                item.grams || Math.round((item.quantity || 1) * 1000)
+                              );
+                            }}
+                            className="p-0.5 px-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded font-bold text-[9px] flex items-center gap-1"
+                            title="Open Weight Calculator"
+                          >
+                            <Scale className="w-2.5 h-2.5" />
+                            <span>Weight Calc</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -761,6 +858,194 @@ export default function NewSalePage() {
               >
                 Save & Select Customer
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: INTEGRATED WEIGHT & QUANTITY CALCULATOR */}
+      {weightCalcProduct && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-3 animate-fade-in">
+          <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl border border-gray-100">
+            {/* Header */}
+            <div className="bg-kiryana-darkGreen text-white p-4 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-emerald-200 font-bold uppercase block">
+                  Weight & Quantity Calculator (وزن اور قیمت)
+                </span>
+                <h4 className="text-sm font-bold truncate">{weightCalcProduct.name}</h4>
+                {weightCalcProduct.nameUrdu && (
+                  <p className="text-xs text-emerald-100 font-urdu">{weightCalcProduct.nameUrdu}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setWeightCalcProduct(null);
+                  setWeightCalcEditingIndex(null);
+                }}
+                className="p-1 rounded-full text-white/80 hover:text-white hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3.5">
+              {/* Rate List Base Price Display */}
+              <div className="bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl flex items-center justify-between text-xs">
+                <span className="font-bold text-emerald-900">Rate List Price:</span>
+                <span className="font-black font-mono text-emerald-950 text-sm">
+                  Rs. {(weightCalcProduct.pricePerUnit || weightCalcProduct.sellingPrice || 0).toFixed(2)} / KG
+                </span>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div>
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                  Quick Weight Presets (چٹکی ریٹ)
+                </label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {WEIGHT_PRESETS.map((preset, idx) => {
+                    const isSelected =
+                      (weightCalcUnitMode === 'gram'
+                        ? Number(weightCalcCustomGrams)
+                        : Number(weightCalcCustomGrams) * 1000) === preset.grams;
+                    const price =
+                      Math.round(
+                        ((preset.grams / 1000) *
+                          (weightCalcProduct.pricePerUnit || weightCalcProduct.sellingPrice || 0) +
+                          Number.EPSILON) *
+                          100
+                      ) / 100;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setWeightCalcUnitMode('gram');
+                          setWeightCalcCustomGrams(String(preset.grams));
+                        }}
+                        className={`p-2 rounded-xl border text-center transition-all ${
+                          isSelected
+                            ? 'bg-kiryana-freshGreen text-white border-kiryana-darkGreen shadow-sm scale-102'
+                            : 'bg-kiryana-softBg border-gray-200 hover:border-emerald-300 text-gray-800'
+                        }`}
+                      >
+                        <span className="text-xs font-bold block">{preset.label}</span>
+                        <span
+                          className={`text-[10px] font-mono block ${
+                            isSelected ? 'text-white' : 'text-kiryana-darkGreen font-extrabold'
+                          }`}
+                        >
+                          Rs. {price}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Custom Weight Input */}
+              <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-gray-700">Custom Weight:</span>
+                  <div className="flex bg-gray-200 rounded-lg p-0.5 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (weightCalcUnitMode === 'kg') {
+                          setWeightCalcCustomGrams(String((Number(weightCalcCustomGrams) || 0) * 1000));
+                        }
+                        setWeightCalcUnitMode('gram');
+                      }}
+                      className={`px-2 py-0.5 rounded-md font-bold ${
+                        weightCalcUnitMode === 'gram'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600'
+                      }`}
+                    >
+                      Gram (گرام)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (weightCalcUnitMode === 'gram') {
+                          setWeightCalcCustomGrams(String((Number(weightCalcCustomGrams) || 0) / 1000));
+                        }
+                        setWeightCalcUnitMode('kg');
+                      }}
+                      className={`px-2 py-0.5 rounded-md font-bold ${
+                        weightCalcUnitMode === 'kg'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600'
+                      }`}
+                    >
+                      KG (کلو)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="any"
+                    value={weightCalcCustomGrams}
+                    onChange={(e) => setWeightCalcCustomGrams(e.target.value)}
+                    placeholder={weightCalcUnitMode === 'gram' ? 'e.g. 750' : 'e.g. 0.75'}
+                    className="w-full px-3 py-2 text-sm font-black font-mono bg-white border border-gray-300 rounded-xl outline-none focus:border-kiryana-freshGreen"
+                    autoFocus
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-gray-400 font-bold uppercase">
+                    {weightCalcUnitMode}
+                  </span>
+                </div>
+
+                {/* Live Formula & Price */}
+                {(() => {
+                  const rawVal = Number(weightCalcCustomGrams) || 0;
+                  const currentGrams = weightCalcUnitMode === 'kg' ? rawVal * 1000 : rawVal;
+                  const baseP = Number(
+                    weightCalcProduct.pricePerUnit || weightCalcProduct.sellingPrice || 0
+                  );
+                  const calc = calculateLinePrice({
+                    pricePerUnit: baseP,
+                    quantity: currentGrams,
+                    unit: 'Gram',
+                    unitType: 'weight',
+                  });
+
+                  return (
+                    <div className="pt-1 border-t border-gray-200 flex items-center justify-between">
+                      <span className="text-[10px] text-gray-500 font-mono">{calc.formulaText}</span>
+                      <span className="text-base font-black font-mono text-kiryana-darkGreen">
+                        Rs. {calc.lineTotal.toFixed(2)}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Action Button */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWeightCalcProduct(null);
+                    setWeightCalcEditingIndex(null);
+                  }}
+                  className="py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyWeightCalculator}
+                  className="flex-1 py-2.5 px-4 bg-kiryana-freshGreen hover:bg-kiryana-darkGreen text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md active:scale-98 transition-all"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{weightCalcEditingIndex !== null ? 'Update Cart Item' : 'Add to Cart'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

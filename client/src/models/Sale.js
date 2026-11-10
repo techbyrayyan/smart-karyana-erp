@@ -7,6 +7,9 @@ const saleItemSchema = new mongoose.Schema(
       ref: 'Product',
       required: true,
     },
+    productId: {
+      type: Number,
+    },
     productName: {
       type: String,
       required: true,

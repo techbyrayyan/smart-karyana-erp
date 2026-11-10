@@ -5,6 +5,7 @@ import { verifyAuth } from '../../../lib/authHelper';
 import Product from '../../../models/Product';
 import StockMovement from '../../../models/StockMovement';
 import Category from '../../../models/Category';
+import Counter from '../../../models/Counter';
 
 export async function GET(request) {
   try {
@@ -81,16 +82,36 @@ export async function POST(request) {
       }
     }
 
+    // Assign atomic sequential Product ID
+    const nextProductId = await Counter.getNextSequenceValue('productId');
+    const cleanSellPrice = Number(sellingPrice) || 0;
+    const cleanUnit = unit || 'KG';
+    const inferredUnitType = ['kg', 'gram', 'liter'].some(u => cleanUnit.toLowerCase().includes(u)) ? 'weight' : 'piece';
+
     const product = await Product.create({
+      productId: nextProductId,
       name: name.trim(),
       nameUrdu: (nameUrdu || '').trim(),
       category: trimmedCategory,
       productImage: productImage || '',
       purchasePrice: Number(purchasePrice) || 0,
-      sellingPrice: Number(sellingPrice) || 0,
+      sellingPrice: cleanSellPrice,
+      salePrice: cleanSellPrice,
+      pricePerUnit: cleanSellPrice,
+      unitType: inferredUnitType,
       currentStock: Number(currentStock) || 0,
-      unit: unit || 'KG',
+      unit: cleanUnit,
       minStockAlert: Number(minStockAlert) || 5,
+      lastRateListUpdate: new Date(),
+      priceHistory: [
+        {
+          previousPrice: 0,
+          newPrice: cleanSellPrice,
+          changedAt: new Date(),
+          source: 'manual_edit',
+          note: 'Initial product creation',
+        },
+      ],
       variations: processedVariations,
     });
 

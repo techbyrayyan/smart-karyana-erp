@@ -24,7 +24,20 @@ export async function apiRequest(endpoint, options = {}) {
     headers,
   });
 
-  const data = await response.json().catch(() => ({ success: false, message: 'Server response error' }));
+  let data;
+  try {
+    const text = await response.text();
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = {
+        success: false,
+        message: text && text.length < 200 ? text : `Server request error (${response.status})`,
+      };
+    }
+  } catch (err) {
+    data = { success: false, message: 'Server communication error' };
+  }
 
   if (!response.ok) {
     // If unauthorized, redirect to login if client-side
@@ -37,6 +50,8 @@ export async function apiRequest(endpoint, options = {}) {
     }
     throw new Error(data.message || `Request failed with status ${response.status}`);
   }
+
+  return data;
 
   return data;
 }
@@ -201,4 +216,33 @@ export const categoryApi = {
     apiRequest(`/categories?id=${id}`, {
       method: 'DELETE',
     }),
+};
+
+// Rate List Management API
+export const rateListApi = {
+  get: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/ratelist${query ? `?${query}` : ''}`);
+  },
+  updatePrice: (id, price, unit = null, unitType = null, reason = '') =>
+    apiRequest('/ratelist', {
+      method: 'PUT',
+      body: JSON.stringify({ id, price, unit, unitType, reason }),
+    }),
+  createProduct: (data) =>
+    apiRequest('/ratelist', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  scan: (formData) =>
+    apiRequest('/ratelist/scan', {
+      method: 'POST',
+      body: formData,
+    }),
+  confirm: (payload) =>
+    apiRequest('/ratelist/confirm', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  getHistory: () => apiRequest('/ratelist/history'),
 };
